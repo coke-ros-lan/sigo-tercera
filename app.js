@@ -23,7 +23,6 @@ try { enableIndexedDbPersistence(dbCloud); } catch (err) { console.warn("Modo of
 // ==========================================
 // NUEVO: SISTEMA DE SESIÓN AYUDANTES Y TECLADO
 // ==========================================
-const PIN_OFICIAL = "09304"; 
 let pinAdminIngresado = "";
 let criterioOrdenRanking = "asistencias"; 
 
@@ -111,20 +110,36 @@ function actualizarAdminDots() {
     });
 }
 
-function verificarAdminPin() {
-    if (pinAdminIngresado === PIN_OFICIAL) {
-        localStorage.setItem("sigo_oficial_exp", Date.now() + (10 * 60 * 1000));
-        cerrarPadAdmin();
-        aplicarPermisos();
-        alert("✅ Modo Ayudante Activado por 10 minutos.");
-    } else {
-        const indicators = document.getElementById("admin-pin-indicators");
-        indicators.classList.add("error");
-        setTimeout(() => {
-            indicators.classList.remove("error");
-            clearAdminPin();
-        }, 400);
+// NUEVA FUNCIÓN DE VERIFICACIÓN BLINDADA
+async function verificarAdminPin() {
+    try {
+        // Vamos a Firebase a buscar el PIN real
+        const docRef = doc(dbCloud, "configuracion", "admin");
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists() && docSnap.data().pin === pinAdminIngresado) {
+            // PIN Correcto
+            localStorage.setItem("sigo_oficial_exp", Date.now() + (10 * 60 * 1000));
+            cerrarPadAdmin();
+            aplicarPermisos();
+            alert("✅ Modo Ayudante Activado por 10 minutos.");
+        } else {
+            // PIN Incorrecto
+            falloPin();
+        }
+    } catch(e) {
+        alert("Error de conexión al verificar el PIN.");
+        falloPin();
     }
+}
+
+function falloPin() {
+    const indicators = document.getElementById("admin-pin-indicators");
+    indicators.classList.add("error");
+    setTimeout(() => {
+        indicators.classList.remove("error");
+        clearAdminPin();
+    }, 400);
 }
 
 // ==========================================
