@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIGO 6.3 - Tercera Compañía</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0d2659">
+    <link rel="icon" type="image/png" href="LogoTercera.png">
+    <link rel="apple-touch-icon" href="LogoTercera.png">
+    
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style> summary::-webkit-details-marker { display: none; } </style>
+</head>
+
+<body>
+
+    <div id="admin-pin-pad" class="lock-screen">
+        <span class="close-btn" style="position:absolute; top: max(20px, env(safe-area-inset-top)); right: 20px;" onclick="cerrarPadAdmin()"><i class="fa-solid fa-xmark"></i></span>
+        <h2 class="lock-title">Acceso Ayudantes</h2>
+        <p style="color: var(--dorado); margin-bottom: 20px; font-size: 0.85rem;">La sesión durará 10 minutos</p>
+        <div class="pin-indicators" id="admin-pin-indicators">
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            <div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="keypad">
+            <button class="key-btn" onclick="pressAdminKey('1')">1</button>
+            <button class="key-btn" onclick="pressAdminKey('2')">2<span>ABC</span></button>
+            <button class="key-btn" onclick="pressAdminKey('3')">3<span>DEF</span></button>
+            <button class="key-btn" onclick="pressAdminKey('4')">4<span>GHI</span></button>
+            <button class="key-btn" onclick="pressAdminKey('5')">5<span>JKL</span></button>
+            <button class="key-btn" onclick="pressAdminKey('6')">6<span>MNO</span></button>
+            <button class="key-btn" onclick="pressAdminKey('7')">7<span>PQRS</span></button>
+            <button class="key-btn" onclick="pressAdminKey('8')">8<span>TUV</span></button>
+            <button class="key-btn" onclick="pressAdminKey('9')">9<span>WXYZ</span></button>
+            <button class="key-btn text-btn" onclick="clearAdminPin()">Cancelar</button>
+            <button class="key-btn" onclick="pressAdminKey('0')">0</button>
+            <button class="key-btn text-btn" onclick="deleteAdminKey()">Borrar</button>
+        </div>
+    </div>
+
+    <button id="menu-toggle" onclick="toggleMenu()"><i class="fa-solid fa-bars"></i></button>
+
+    <aside class="sidebar" id="sidebar">
+        <div class="logo-container">
+            <span class="close-menu-btn" onclick="toggleMenu()"><i class="fa-solid fa-xmark"></i></span>
+            <div class="logo-shield">
+                <img src="LogoTercera.png" alt="Escudo Tercera" onerror="this.src='https://via.placeholder.com/80x80/d9b233/0d2659?text=3ra';">
+            </div>
+            <h2>Tercera Compañía</h2>
+            <p class="subtitle-menu">SIGO Build 6.3</p>
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item active" onclick="switchView('inicio', this)"><i class="fa-solid fa-house"></i> Inicio</li>
+            <li class="nav-item" onclick="abrirModalLicencia()"><i class="fa-solid fa-file-medical"></i> Solicitar Licencia</li>
+            <li class="nav-item" onclick="switchView('historial', this)"><i class="fa-solid fa-clock-rotate-left"></i> Historial Operativo</li>
+            
+            <li class="nav-item req-oficial" onclick="switchView('licencias-vista', this)"><i class="fa-solid fa-bed"></i> Registro de Licencias</li>
+            
+            <li class="nav-item req-oficial" onclick="switchView('mapa', this)"><i class="fa-solid fa-map-location-dot"></i> Mapa Operacional</li>
+            <li class="nav-item" onclick="switchView('estadisticas', this)"><i class="fa-solid fa-chart-pie"></i> Estadísticas Operativas</li>
+            <li class="nav-item" onclick="switchView('personal', this)"><i class="fa-solid fa-address-card"></i> Fichas de Personal</li>
+            <li class="nav-item" onclick="switchView('inventario', this)"><i class="fa-solid fa-truck-fast"></i> Material Mayor</li>
+            <li class="nav-item req-oficial" onclick="switchView('exportacion', this)"><i class="fa-solid fa-file-excel"></i> Exportar Reportes</li>
+        </ul>
+        <button id="btn-perfil" class="version-btn" onclick="abrirPadAdmin()"><i class="fa-solid fa-user"></i> Perfil: Voluntario</button>
+    </aside>
+
+    <div id="sidebar-overlay" onclick="toggleMenu()"></div>
+
+    <main class="main-content">
+        
+        <div id="banner-emergencia" class="banner-alerta" style="display: none;"></div>
+
+        <section id="inicio" class="view-section active">
+            <div class="hero">
+                <img src="LogoTercera.png" alt="Logo Tercera" class="hero-logo-img" onerror="this.src='https://via.placeholder.com/250x250/d9b233/0d2659?text=Logo+Tercera';">
+                
+                <h1>TERCERA COMPAÑÍA</h1>
+                <p>Sistema Integrado de Gestión Operativa</p>
+                <button id="btn-nuevo-servicio" class="btn-primary hero-btn req-oficial" onclick="irPaso1()">
+                    <i class="fa-solid fa-circle-plus"></i> NUEVO SERVICIO
+                </button>
+
+                <button id="btn-instalar-app" class="btn-secundary" style="display: none; margin-top: 15px; border-color: var(--dorado); color: var(--dorado);">
+                    <i class="fa-solid fa-download"></i> Instalar SIGO en el Teléfono
+                </button>
+            </div>
+        </section>
+
+        <section id="historial" class="view-section">
+            <div class="header-section">
+                <h2 class="title-header">Historial Operativo</h2>
+            </div>
+            <div id="lista-historial" class="list-container"></div>
+        </section>
+
+        <section id="licencias-vista" class="view-section req-oficial">
+            <div class="header-section">
+                <h2 class="title-header">Registro de Licencias</h2>
+                <p style="color: var(--texto-gris); margin-top: 5px;">Revisión y control de licencias solicitadas por el personal.</p>
+            </div>
+            <div id="lista-licencias-registradas" class="list-container"></div>
+        </section>
+
+        <section id="mapa" class="view-section req-oficial">
+            <h2 class="title-header">Mapa Operacional</h2>
+            <div id="mapa-global" class="map-container"></div>
+        </section>
+
+        <section id="estadisticas" class="view-section">
+            <div class="header-section" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 class="title-header">Estadísticas Operativas</h2>
+                <select id="filtro-tiempo" class="input-glass" onchange="actualizarDashboard()" style="width: auto;">
+                    <option value="mes_actual" selected>Mes Actual</option>
+                    <option value="7">7 Días</option>
+                    <option value="30">30 Días</option>
+                    <option value="180">6 Meses</option>
+                    <option value="365">Año Actual</option>
+                    <option value="todo">Histórico</option>
+                </select>
+            </div>
+            <div class="grid-kpi" id="dashboard-kpis"></div>
+            <div class="chart-container">
+                <h3 style="color: var(--dorado); margin-bottom: 15px;">Distribución de Emergencias</h3>
+                <canvas id="grafico-emergencias"></canvas>
+            </div>
+        </section>
+
+        <section id="personal" class="view-section">
+            <h2 class="title-header">Nómina de Personal y Fichas</h2>
+            <div id="lista-personal" class="list-container"></div>
+        </section>
+
+        <section id="inventario" class="view-section">
+            <h2 class="title-header">Material Mayor</h2>
+            <div id="lista-maquinas" class="list-container"></div>
+        </section>
+
+        <section id="exportacion" class="view-section req-oficial">
+            <h2 class="title-header">Exportar a Excel (CSV)</h2>
+            <div class="form-glass glass-panel" style="padding: 20px; border-radius: 15px;">
+                <div class="form-group">
+                    <label>Desde Fecha:</label>
+                    <input type="date" id="export-desde" class="input-glass">
+                </div>
+                <div class="form-group">
+                    <label>Hasta Fecha:</label>
+                    <input type="date" id="export-hasta" class="input-glass">
+                </div>
+                <button class="btn-primary" style="width: 100%;" onclick="exportarCSV()">
+                    <i class="fa-solid fa-table-cells"></i> Generar Informe Operativo
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="modal-servicio" class="modal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h2 id="modal-titulo">Paso 1: Datos Operativos</h2>
+                <span class="close-btn" onclick="cerrarModal('modal-servicio')"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body">
+                
+                <div id="paso-1" class="step active">
+                    <div class="form-group">
+                        <label>Clasificación del Servicio</label>
+                        <select id="sel-actividad" class="input-glass" onchange="alCambiarActividad()"></select>
+                        <input type="text" id="inp-actividad-otra" class="input-glass" placeholder="Especificar actividad..." style="display: none; margin-top: 10px;">
+                    </div>
+
+                    <div class="form-group" id="contenedor-asistencia-doble" style="display: none;">
+                        <label class="checkbox-item" style="border-color: var(--dorado); box-shadow: 0 4px 10px rgba(217, 178, 51, 0.1);">
+                            <input type="checkbox" id="chk-asistencia-doble"> <i class="fa-solid fa-star" style="color: var(--dorado);"></i> Asistencia / Falta Doble
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Dirección exacta</label>
+                        <input type="text" id="inp-direccion" class="input-glass" placeholder="Ej: Arturo Prat 123">
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha y Hora</label>
+                        <input type="datetime-local" id="inp-fecha" class="input-glass">
+                    </div>
+                    <div class="form-group">
+                        <label>Máquinas Desplegadas (Tercera)</label>
+                        <div id="contenedor-maquinas" class="checkbox-group"></div>
+                    </div>
+                    <details style="margin-top: 15px; margin-bottom: 15px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+                        <summary style="padding: 12px 15px; color: var(--dorado); font-weight: 600; cursor: pointer; user-select: none; list-style: none;">
+                            <i class="fa-solid fa-plus-circle"></i> Seleccionar Carros de Apoyo
+                        </summary>
+                        <div style="padding: 0 15px 15px 15px;">
+                            <div id="contenedor-apoyo" class="checkbox-group" style="margin-bottom: 10px;"></div>
+                            <input type="text" id="inp-otras-maquinas" class="input-glass" placeholder="Otro carro externo (Ej: K-1)" style="font-size: 0.85rem; padding: 8px 12px;">
+                        </div>
+                    </details>
+                    <div class="modal-footer-spacing">
+                        <button class="btn-primary" style="width: 100%;" onclick="irPaso2()">Continuar <i class="fa-solid fa-arrow-right"></i></button>
+                    </div>
+                </div>
+
+                <div id="paso-2" class="step">
+                    <div class="info-box"><p id="txt-direccion-confirmar" style="font-weight: bold; text-align: center; font-size: 1.1rem; color: var(--texto-blanco);"></p></div>
+                    <div id="mapa-seleccion" class="map-container-small"></div>
+                    <p id="txt-estado-gps" style="color: var(--dorado); margin-bottom: 15px; text-align: center;"><i class="fa-solid fa-satellite-dish"></i> Buscando...</p>
+                    <button class="btn-secundary" style="width: 100%; margin-bottom: 15px;" onclick="obtenerGPSDispositivo()"><i class="fa-solid fa-location-crosshairs"></i> Usar mi GPS actual</button>
+                    <div id="footer-emergencia" class="modal-footer-spacing" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <button class="btn-secundary" style="flex: 1;" onclick="volverPaso1()"><i class="fa-solid fa-arrow-left"></i></button>
+                        <button class="btn-primary" style="flex: 2; background: linear-gradient(180deg, #ff6b6b, var(--rojo-emergencia)); color: white; padding: 10px;" onclick="guardarEnCurso()"><i class="fa-solid fa-tower-observation"></i> En Curso</button>
+                        <button class="btn-primary" style="flex: 2; padding: 10px;" onclick="irPaso3()">Pasar Lista <i class="fa-solid fa-list-check"></i></button>
+                    </div>
+                    <div id="footer-interna" class="modal-footer-spacing" style="display: none; gap: 10px; margin-bottom: 10px;">
+                        <button class="btn-secundary" style="flex: 1;" onclick="volverPaso1()"><i class="fa-solid fa-arrow-left"></i></button>
+                        <button class="btn-primary" style="flex: 3;" onclick="irPaso3()">Pasar Lista <i class="fa-solid fa-arrow-right"></i></button>
+                    </div>
+                </div>
+
+                <div id="paso-3" class="step">
+                    <div class="info-box" style="margin-bottom: 15px;"><p id="txt-resumen-servicio" style="font-size: 0.9rem; text-align: center; color: var(--texto-blanco);"></p></div>
+                    <div id="lista-asistencia" class="lista-asistencia-grid"></div>
+                    <div class="modal-footer-spacing" style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button class="btn-secundary" style="flex: 1;" onclick="volverPaso2()"><i class="fa-solid fa-arrow-left"></i> Volver</button>
+                        <button class="btn-primary" style="flex: 2;" onclick="guardarReporteFinal()"><i class="fa-solid fa-floppy-disk"></i> Guardar Reporte</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-licencia" class="modal">
+        <div class="modal-content glass-panel" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Solicitud de Licencia</h2>
+                <span class="close-btn" onclick="cerrarModal('modal-licencia')"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--texto-gris); font-size: 0.9rem; margin-bottom: 20px; text-align: center;">Válido únicamente para Actividades Internas (Citaciones).</p>
+                <div class="form-group">
+                    <label>Nombre Completo</label>
+                    <select id="licencia-nombre" class="input-glass"></select>
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label>RUT</label>
+                        <input type="text" id="licencia-rut" class="input-glass" placeholder="12.345.678-9" oninput="formatearRUT(this)" maxlength="12">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Cargo</label>
+                        <input type="text" id="licencia-cargo" class="input-glass" readonly style="color: var(--dorado); background: rgba(0,0,0,0.5);">
+                    </div>
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label>Fecha de Inicio</label>
+                        <input type="date" id="licencia-inicio" class="input-glass">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Fecha de Término</label>
+                        <input type="date" id="licencia-termino" class="input-glass">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Motivo de la Licencia</label>
+                    <textarea id="licencia-motivo" class="input-glass" rows="3" placeholder="Indique el motivo (trabajo, salud, estudios, etc.)"></textarea>
+                </div>
+                <div class="modal-footer-spacing">
+                    <button class="btn-primary" style="width: 100%; margin-top: 15px;" onclick="enviarLicencia()"><i class="fa-solid fa-paper-plane"></i> Enviar Solicitud</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-autoregistro" class="modal">
+        <div class="modal-content glass-panel" style="max-width: 400px; text-align: center;">
+            <div class="modal-header">
+                <h2>Registrar Asistencia</h2>
+                <span class="close-btn" onclick="cerrarModal('modal-autoregistro')"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body">
+                <i class="fa-solid fa-helmet-safety" style="font-size: 3rem; color: var(--dorado); margin-bottom: 15px;"></i>
+                <p style="color: var(--texto-gris); margin-bottom: 20px; font-size: 0.95rem;">Selecciona tu nombre para confirmar tu presencia operativa.</p>
+                <select id="sel-autoregistro-nombre" class="input-glass" style="margin-bottom: 20px;"></select>
+                <p id="txt-autoregistro-estado" style="color: var(--dorado); margin-bottom: 15px; font-size: 0.9rem;"></p>
+                <div id="caja-pin-autoregistro" style="display: none; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.1);">
+                    <label style="display: block; color: var(--rojo-emergencia); font-weight: bold; margin-bottom: 10px; font-size: 0.9rem;"><i class="fa-solid fa-triangle-exclamation"></i> Estás fuera del rango de 100m.</label>
+                    <input type="number" id="inp-autoregistro-pin" class="input-glass" placeholder="PIN de Emergencia (3 dígitos)" style="text-align: center; letter-spacing: 5px; font-size: 1.2rem;">
+                </div>
+                <div class="modal-footer-spacing">
+                    <button id="btn-procesar-asistencia" class="btn-primary" style="width: 100%;" onclick="procesarAutoregistro()"><i class="fa-solid fa-location-crosshairs"></i> Validar Ubicación</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-detalle-reporte" class="modal">
+        <div class="modal-content glass-panel" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Detalle del Servicio</h2>
+                <span class="close-btn" onclick="cerrarModal('modal-detalle-reporte')"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body" id="contenido-detalle-reporte"></div>
+        </div>
+    </div>
+
+    <div id="modal-editar-reporte" class="modal">
+        <div class="modal-content glass-panel" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Editar Servicio</h2>
+                <span class="close-btn" onclick="cerrarModal('modal-editar-reporte')"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.05);">
+                    <label style="color: var(--dorado);">Estado del Servicio</label>
+                    <select id="edit-estado-servicio" class="input-glass" style="border-color: var(--dorado);">
+                        <option value="Finalizado">Finalizado (Cerrado)</option>
+                        <option value="En Curso">En Curso (Abierto a Asistencia)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="color: var(--texto-gris);">Clave Original Despachada</label>
+                    <p id="edit-actividad" style="color: rgba(255,255,255,0.6); padding: 12px 15px; background: rgba(0,0,0,0.2); border-radius: 14px; font-weight: 500;"></p>
+                </div>
+                
+                <div class="form-group" id="edit-contenedor-asistencia-doble" style="display: none;">
+                    <label class="checkbox-item" style="border-color: var(--dorado); box-shadow: 0 4px 10px rgba(217, 178, 51, 0.1);">
+                        <input type="checkbox" id="edit-chk-asistencia-doble"> <i class="fa-solid fa-star" style="color: var(--dorado);"></i> Asistencia / Falta Doble
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label style="color: var(--dorado);">Reclasificar Clave (Opcional)</label>
+                    <select id="edit-reclasificacion" class="input-glass">
+                        <option value="">Mantener clave original</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Modificar Dirección</label>
+                    <input type="text" id="edit-direccion" class="input-glass">
+                </div>
+                <div class="form-group">
+                    <label>Modificar Fecha y Hora</label>
+                    <input type="datetime-local" id="edit-fecha" class="input-glass">
+                </div>
+                <div class="form-group">
+                    <label>Modificar Máquinas (Tercera)</label>
+                    <div id="edit-contenedor-maquinas" class="checkbox-group"></div>
+                </div>
+                <details style="margin-top: 15px; margin-bottom: 15px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+                    <summary style="padding: 12px 15px; color: var(--dorado); font-weight: 600; cursor: pointer; user-select: none; list-style: none;">
+                        <i class="fa-solid fa-plus-circle"></i> Modificar Carros de Apoyo
+                    </summary>
+                    <div style="padding: 0 15px 15px 15px;">
+                        <div id="edit-contenedor-apoyo" class="checkbox-group" style="margin-bottom: 10px;"></div>
+                        <input type="text" id="edit-otras-maquinas" class="input-glass" placeholder="Otro carro externo (Ej: K-1)" style="font-size: 0.85rem; padding: 8px 12px;">
+                    </div>
+                </details>
+                <h3 style="color: var(--dorado); margin: 20px 0 10px 0; font-size: 1.1rem; border-bottom: 1px solid var(--borde-translucido); padding-bottom: 5px;">Modificar Asistencia</h3>
+                <div id="edit-lista-asistencia" class="lista-asistencia-grid" style="max-height: 250px; overflow-y: auto; padding-right: 5px; margin-bottom: 15px;"></div>
+                <div class="modal-footer-spacing">
+                    <button class="btn-primary" style="width: 100%; margin-top: 15px;" onclick="guardarEdicionReporte()"><i class="fa-solid fa-floppy-disk"></i> Guardar Cambios</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-ficha-personal" class="modal">
+        <div class="modal-content glass-panel" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Hoja de Vida</h2>
+                <span class="close-btn" onclick="cerrarModal('modal-ficha-personal')"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="color: var(--dorado);">Filtrar por Periodo</label>
+                <select id="filtro-mes-ficha" class="input-glass" onchange="cambiarFiltroFicha()"></select>
+            </div>
+            <div class="modal-body" id="contenido-ficha-personal"></div>
+        </div>
+    </div>
+
+    <div id="modal-detalle-maquina" class="modal">
+        <div class="modal-content glass-panel" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 id="titulo-detalle-maquina">Inventario Táctico</h2>
+                <span class="close-btn" onclick="cerrarModal('modal-detalle-maquina')"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Estado de la Máquina</label>
+                    <select id="sel-estado-maquina" class="input-glass" onchange="actualizarEstadoMaquina()"></select>
+                </div>
+                
+                <div class="truck-blueprint"></div>
+
+                <h3 style="color: var(--dorado); margin: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">Mostrando: <span id="lbl-gaveta-actual" style="color: white; font-weight: 800;">G-3</span></h3>
+                
+                <div id="lista-items-maquina" class="list-container" style="max-height: 250px; overflow-y: auto; padding-right: 5px;"></div>
+                
+                <div id="contenedor-add-herramienta" class="form-glass modal-footer-spacing req-oficial" style="margin-top: 20px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.2);">
+                    <h4 style="color: white; margin-bottom: 15px;"><i class="fa-solid fa-plus-circle" style="color: var(--dorado);"></i> Añadir Elemento</h4>
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <input type="text" id="nuevo-item-nombre" class="input-glass" placeholder="Nombre (Ej: Pitón Protek)" style="flex: 3;">
+                        <input type="number" id="nuevo-item-cant" class="input-glass" placeholder="Cant" style="flex: 1;" value="1">
+                    </div>
+                    <button class="btn-secundary" style="width: 100%;" onclick="agregarItemInventario()">Guardar Herramienta</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-editar-epp" class="modal">
+        <div class="modal-content glass-panel" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Editar Equipo Asignado</h2>
+                <span class="close-btn" onclick="cerrarModal('modal-editar-epp')"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body">
+                <h4 style="color: var(--rojo-emergencia); margin-bottom: 15px;"><i class="fa-solid fa-fire-burner"></i> EPP Estructural</h4>
+                <div class="form-group">
+                    <label>Casco (Código)</label>
+                    <input type="text" id="edit-epp-est-casco" class="input-glass" placeholder="Ej: C-14">
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label>Chaqueta</label>
+                        <input type="text" id="edit-epp-est-chaqueta" class="input-glass" placeholder="Cod/Talla">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Jardinera</label>
+                        <input type="text" id="edit-epp-est-jardinera" class="input-glass" placeholder="Cod/Talla">
+                    </div>
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label>Botas</label>
+                        <input type="text" id="edit-epp-est-botas" class="input-glass" placeholder="Marca/Talla">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Guantes</label>
+                        <input type="text" id="edit-epp-est-guantes" class="input-glass" placeholder="Marca/Talla">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Esclavina</label>
+                    <select id="edit-epp-est-esclavina" class="input-glass">
+                        <option value="Sí">Sí</option>
+                        <option value="No">No</option>
+                    </select>
+                </div>
+
+                <h4 style="color: var(--verde-ok); margin-top: 25px; margin-bottom: 15px;"><i class="fa-solid fa-tree"></i> EPP Multirol</h4>
+                <div class="form-group">
+                    <label>Casco (Código)</label>
+                    <input type="text" id="edit-epp-mul-casco" class="input-glass" placeholder="Ej: CM-14">
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label>Chaqueta</label>
+                        <input type="text" id="edit-epp-mul-chaqueta" class="input-glass" placeholder="Cod/Talla">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Pantalón</label>
+                        <input type="text" id="edit-epp-mul-pantalon" class="input-glass" placeholder="Cod/Talla">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Botas (Marca/Talla)</label>
+                    <input type="text" id="edit-epp-mul-botas" class="input-glass" placeholder="Marca/Talla">
+                </div>
+
+                <div class="modal-footer-spacing">
+                    <button class="btn-primary" style="width: 100%; margin-top: 15px;" onclick="guardarEdicionEPP()"><i class="fa-solid fa-floppy-disk"></i> Guardar Inventario</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+            .then(() => console.log("SW Registrado con éxito"))
+            .catch((err) => console.log("Error al registrar SW:", err));
+        }
+    </script>
+    <script type="module" src="app.js"></script>
+
+</body>
+</html>

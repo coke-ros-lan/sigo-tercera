@@ -1,0 +1,23 @@
+{
+  "name": "SIGO 6.1 - Tercera Compañía",
+  "short_name": "SIGO 3ra",
+  "description": "Sistema Integrado de Gestión Operativa",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#051024",
+  "theme_color": "#0d2659",
+  "icons": [
+    {
+      "src": "LogoTercera.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "LogoTercera.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
