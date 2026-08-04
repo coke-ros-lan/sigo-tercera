@@ -66,9 +66,9 @@
             <li class="nav-item req-oficial" onclick="switchView('licencias-vista', this)"><i class="fa-solid fa-bed"></i> Registro de Licencias</li>
             
             <li class="nav-item req-oficial" onclick="switchView('mapa', this)"><i class="fa-solid fa-map-location-dot"></i> Mapa Operacional</li>
-            <li class="nav-item" onclick="switchView('estadisticas', this)"><i class="fa-solid fa-chart-pie"></i> Estadísticas Operativas</li>
-            <li class="nav-item" onclick="switchView('personal', this)"><i class="fa-solid fa-address-card"></i> Fichas de Personal</li>
-            <li class="nav-item" onclick="switchView('inventario', this)"><i class="fa-solid fa-truck-fast"></i> Material Mayor</li>
+            <li class="nav-item req-oficial" onclick="switchView('estadisticas', this)"><i class="fa-solid fa-chart-pie"></i> Estadísticas Operativas</li>
+            <li class="nav-item req-oficial" onclick="switchView('personal', this)"><i class="fa-solid fa-address-card"></i> Fichas de Personal</li>
+            <li class="nav-item req-oficial" onclick="switchView('inventario', this)"><i class="fa-solid fa-truck-fast"></i> Material Mayor</li>
             <li class="nav-item req-oficial" onclick="switchView('exportacion', this)"><i class="fa-solid fa-file-excel"></i> Exportar Reportes</li>
         </ul>
         <button id="btn-perfil" class="version-btn" onclick="abrirPadAdmin()"><i class="fa-solid fa-user"></i> Perfil: Voluntario</button>
@@ -86,7 +86,7 @@
                 
                 <h1>TERCERA COMPAÑÍA</h1>
                 <p>Sistema Integrado de Gestión Operativa</p>
-                <button id="btn-nuevo-servicio" class="btn-primary hero-btn req-oficial" onclick="irPaso1()">
+                <button id="btn-nuevo-servicio" class="btn-primary hero-btn" onclick="irPaso1()">
                     <i class="fa-solid fa-circle-plus"></i> NUEVO SERVICIO
                 </button>
 
@@ -116,7 +116,7 @@
             <div id="mapa-global" class="map-container"></div>
         </section>
 
-        <section id="estadisticas" class="view-section">
+        <section id="estadisticas" class="view-section req-oficial">
             <div class="header-section" style="display: flex; justify-content: space-between; align-items: center;">
                 <h2 class="title-header">Estadísticas Operativas</h2>
                 <select id="filtro-tiempo" class="input-glass" onchange="actualizarDashboard()" style="width: auto;">
@@ -135,12 +135,12 @@
             </div>
         </section>
 
-        <section id="personal" class="view-section">
+        <section id="personal" class="view-section req-oficial">
             <h2 class="title-header">Nómina de Personal y Fichas</h2>
             <div id="lista-personal" class="list-container"></div>
         </section>
 
-        <section id="inventario" class="view-section">
+        <section id="inventario" class="view-section req-oficial">
             <h2 class="title-header">Material Mayor</h2>
             <div id="lista-maquinas" class="list-container"></div>
         </section>
@@ -158,6 +158,12 @@
                 </div>
                 <button class="btn-primary" style="width: 100%;" onclick="exportarCSV()">
                     <i class="fa-solid fa-table-cells"></i> Generar Informe Operativo
+                </button>
+                <button class="btn-secundary" style="width: 100%; margin-top: 12px;" onclick="exportarEquipoPersonal()">
+                    <i class="fa-solid fa-shirt"></i> Exportar Equipo Personal (EPP)
+                </button>
+                <button class="btn-secundary" style="width: 100%; margin-top: 12px;" onclick="exportarInventarioUnidades()">
+                    <i class="fa-solid fa-truck-fast"></i> Exportar Inventario de Unidades
                 </button>
             </div>
         </section>
@@ -414,6 +420,29 @@
                         <input type="number" id="nuevo-item-cant" class="input-glass" placeholder="Cant" style="flex: 1;" value="1">
                     </div>
                     <button class="btn-secundary" style="width: 100%;" onclick="agregarItemInventario()">Guardar Herramienta</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-fusion-servicio" class="modal">
+        <div class="modal-content glass-panel" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Fusionar Servicio Duplicado</h2>
+                <span class="close-btn" onclick="cerrarModal('modal-fusion-servicio')"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--texto-gris); font-size: 0.9rem; margin-bottom: 15px;">Usa esto cuando varios voluntarios crearon el mismo servicio por separado. El duplicado se elimina y sus asistentes y carros se suman al servicio principal.</p>
+                <div class="info-box" style="margin-bottom: 20px;">
+                    <label style="color: var(--dorado); font-size: 0.8rem; display: block; margin-bottom: 5px;">SERVICIO PRINCIPAL (se mantiene)</label>
+                    <p id="fusion-info-principal" style="color: white; font-weight: bold;"></p>
+                </div>
+                <div class="form-group">
+                    <label>Servicio Duplicado a Fusionar</label>
+                    <select id="fusion-select-duplicado" class="input-glass"></select>
+                </div>
+                <div class="modal-footer-spacing">
+                    <button class="btn-primary" style="width: 100%; margin-top: 15px; background: linear-gradient(180deg, #e0b83e, var(--dorado));" onclick="confirmarFusionServicio()"><i class="fa-solid fa-code-merge"></i> Confirmar Fusión</button>
                 </div>
             </div>
         </div>

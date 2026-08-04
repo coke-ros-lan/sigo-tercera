@@ -156,7 +156,7 @@ const DatosClaves = {
     actividadesInternas: ["Sesión de Compañía", "Sesión Extraordinaria", "Junta de Oficiales", "Ejercicio de Compañía", "Otra (Especificar)"],
     carrosApoyo: ["B-1", "BT-1", "Z-1", "B-2", "BX-2"],
     cargosJuntaOficiales: [ 
-        "Director", "Secretario", "Tesorera", "Pro Tesorera", "Pro Tesorero", "Pro Secretaria", 
+        "Director", "Secretario", "Secretaria", "Tesorera", "Pro Tesorera", "Pro Tesorero", "Pro Secretaria", 
         "Pro Secretario", "Capitán", "Teniente 1°", "Teniente 2°", "Teniente 3°", "Ayudante", "Ayudante 2°" 
     ],
     latBase: -38.74465,
@@ -178,8 +178,8 @@ const DatosClaves = {
         { nombre: "Alexis Edwardr Sepúlveda Peña", cargo: "Teniente 1°" },
         { nombre: "Felipe Andrés Povea Saez", cargo: "Teniente 2°" },
         { nombre: "Brayan Enrique Huina Huechuqueo", cargo: "Teniente 3°" },
-        { nombre: "Jorge Alberto Rudolph Delgado-Perez", cargo: "Secretario" },
-        { nombre: "Soledad Angélica Friz Friz", cargo: "Pro Secretario" },
+        { nombre: "Jorge Alberto Rudolph Delgado-Perez", cargo: "Bombero Compañía" },
+        { nombre: "Soledad Angélica Friz Friz", cargo: "Secretaria" },
         { nombre: "Massiel Edith Jara Jara", cargo: "Tesorera" },
         { nombre: "Andrea Loreto Gabriela So Díaz Muñoz", cargo: "Pro Tesorero" },
         { nombre: "Alfredo Segundo San Martín Lizama", cargo: "Maquinista" },
@@ -196,7 +196,7 @@ const DatosClaves = {
         { nombre: "Daniela Andrea Castillo Quinchaleo", cargo: "Bombera Compañía" },
         { nombre: "Juan Isaac Colipi Huilipan", cargo: "Bombero Compañía" },
         { nombre: "Damariz Paulina Soto Fuentes", cargo: "Bombera Compañía" },
-        { nombre: "Gabriela Francisca Valdebenito Jara", cargo: "Bombera Compañía" },
+        { nombre: "Gabriela Francisca Valdebenito Jara", cargo: "Pro Secretaria" },
         { nombre: "Alonso Julian Ignacio Lincoñir Herrera", cargo: "Bombero Compañía" },
         { nombre: "Eduardo Eliseo Olavarria Fischer", cargo: "Bombero Compañía" },
         { nombre: "Eduardo Alejandro Lepiqueo Levinao", cargo: "Bombero Compañía" },
@@ -830,13 +830,80 @@ window.verDetalleReporte = function(id) {
     }
     
     html += `
-        <div class="req-oficial" style="display: flex; gap: 10px; margin-top: 25px;">
+        <div class="req-oficial" style="display: flex; gap: 10px; margin-top: 25px; flex-wrap: wrap;">
             <button class="btn-secundary" style="flex: 1;" onclick="abrirEdicionReporte('${id}')"><i class="fa-solid fa-pen"></i> Editar / Cerrar</button>
+            <button class="btn-secundary" style="flex: 1; color: var(--dorado); border-color: var(--dorado);" onclick="abrirSelectorFusion('${id}')"><i class="fa-solid fa-code-merge"></i> Fusionar Duplicado</button>
             <button class="btn-secundary" style="flex: 1; color: var(--rojo-emergencia); border-color: var(--rojo-emergencia);" onclick="borrarReporte('${id}')"><i class="fa-solid fa-trash"></i> Eliminar</button>
         </div>`;
     
     document.getElementById("contenido-detalle-reporte").innerHTML = html;
     abrirModal("modal-detalle-reporte");
+}
+
+let reporteFusionActual = null;
+
+function unionListas(a, b) {
+    return [...new Set([...(a || []), ...(b || [])])];
+}
+
+window.abrirSelectorFusion = function(id) {
+    reporteFusionActual = id;
+    const principal = MEMORIA_REPORTES.find(rep => rep.id === id);
+    if (!principal) return;
+
+    const candidatos = MEMORIA_REPORTES
+        .filter(r => r.id !== id && r.esActividadInterna === principal.esActividadInterna)
+        .sort((a, b) => b.fecha - a.fecha);
+
+    const dPrincipal = new Date(principal.fecha);
+    document.getElementById("fusion-info-principal").innerText = `${principal.actividad} — ${principal.direccion} — ${dPrincipal.toLocaleDateString()} ${dPrincipal.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} (${principal.asistentesNombres.length} asistentes)`;
+
+    const sel = document.getElementById("fusion-select-duplicado");
+    if (candidatos.length === 0) {
+        sel.innerHTML = `<option value="">No hay otros servicios del mismo tipo para fusionar</option>`;
+    } else {
+        sel.innerHTML = `<option value="">-- Selecciona el servicio duplicado --</option>` + candidatos.map(r => {
+            const d = new Date(r.fecha);
+            return `<option value="${r.id}">${r.actividad} — ${r.direccion} — ${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} (${r.asistentesNombres.length} asist.)</option>`;
+        }).join('');
+    }
+
+    cerrarModal("modal-detalle-reporte");
+    abrirModal("modal-fusion-servicio");
+}
+
+window.confirmarFusionServicio = async function() {
+    const idDup = document.getElementById("fusion-select-duplicado").value;
+    if (!idDup) { alert("Selecciona el servicio duplicado a fusionar."); return; }
+
+    const principal = MEMORIA_REPORTES.find(r => r.id === reporteFusionActual);
+    const duplicado = MEMORIA_REPORTES.find(r => r.id === idDup);
+    if (!principal || !duplicado) return;
+
+    if (!confirm(`¿Fusionar "${duplicado.actividad}" (${duplicado.direccion}) dentro de "${principal.actividad}" (${principal.direccion})?\n\nEl servicio duplicado se eliminará y sus asistentes y carros se sumarán al servicio principal. Esta acción no se puede deshacer.`)) return;
+
+    const asistentesFusion = unionListas(principal.asistentesNombres, duplicado.asistentesNombres);
+    const licenciasFusion = unionListas(principal.licenciasNombres, duplicado.licenciasNombres).filter(n => !asistentesFusion.includes(n));
+    const faltasFusion = unionListas(principal.faltasNombres, duplicado.faltasNombres).filter(n => !asistentesFusion.includes(n) && !licenciasFusion.includes(n));
+    const maquinasFusion = unionListas(principal.maquinasUtilizadas, duplicado.maquinasUtilizadas);
+    const esDobleFusion = !!(principal.esDoble || duplicado.esDoble);
+
+    try {
+        await updateDoc(doc(dbCloud, "reportes", principal.id), {
+            asistentesNombres: asistentesFusion,
+            licenciasNombres: licenciasFusion,
+            faltasNombres: faltasFusion,
+            maquinasUtilizadas: maquinasFusion,
+            esDoble: esDobleFusion
+        });
+        await deleteDoc(doc(dbCloud, "reportes", duplicado.id));
+        cerrarModal("modal-fusion-servicio");
+        alert("✅ Servicios fusionados correctamente.");
+        cargarHistorial();
+    } catch(e) {
+        alert("Error al fusionar. Revisa tu conexión.");
+        console.error(e);
+    }
 }
 
 let reporteEditandoId = null;
@@ -1654,6 +1721,57 @@ window.exportarCSV = function() {
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = `Matriz_Asistencia_3ra_${dIni}_a_${dFin}.csv`;
+    link.click();
+}
+
+window.exportarEquipoPersonal = function() {
+    const bomberos = MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial;
+
+    if (bomberos.length === 0) { alert("No hay personal registrado para exportar."); return; }
+
+    let csv = "N°;Nombre Completo;Cargo;";
+    csv += "EPP Estructural - Casco;EPP Estructural - Chaqueta;EPP Estructural - Jardinera;EPP Estructural - Botas;EPP Estructural - Guantes;EPP Estructural - Esclavina;";
+    csv += "EPP Multirol - Casco;EPP Multirol - Chaqueta;EPP Multirol - Pantalón;EPP Multirol - Botas\n";
+
+    bomberos.forEach((b, index) => {
+        const est = b.eppEstructural || {};
+        const mul = b.eppMultirol || {};
+        const campos = [
+            index + 1, b.nombre, b.cargo,
+            est.casco || "-", est.chaqueta || "-", est.jardinera || "-", est.botas || "-", est.guantes || "-", est.esclavina || "-",
+            mul.casco || "-", mul.chaqueta || "-", mul.pantalon || "-", mul.botas || "-"
+        ];
+        csv += campos.map(c => `"${String(c).replace(/"/g, '""')}"`).join(";") + "\n";
+    });
+
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Registro_Equipo_Personal_3ra_${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+}
+
+window.exportarInventarioUnidades = function() {
+    if (MEMORIA_MAQUINAS.length === 0) { alert("No hay unidades registradas para exportar."); return; }
+
+    let csv = "Unidad;Estado Unidad;Ubicación/Gaveta;Herramienta;Cantidad Teórica;Cantidad Actual;Estado Ítem\n";
+
+    MEMORIA_MAQUINAS.forEach(m => {
+        const items = MEMORIA_INVENTARIO.filter(i => i.maquinaId === m.id);
+        if (items.length === 0) {
+            csv += [m.nomenclatura, m.estado, "-", "Sin herramientas registradas", "-", "-", "-"].map(c => `"${String(c).replace(/"/g, '""')}"`).join(";") + "\n";
+        } else {
+            items.forEach(i => {
+                const campos = [m.nomenclatura, m.estado, i.ubicacion, i.nombreItem, i.cantidadTeorica, i.cantidadActual, i.estado];
+                csv += campos.map(c => `"${String(c).replace(/"/g, '""')}"`).join(";") + "\n";
+            });
+        }
+    });
+
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Inventario_Unidades_3ra_${new Date().toISOString().slice(0,10)}.csv`;
     link.click();
 }
 
