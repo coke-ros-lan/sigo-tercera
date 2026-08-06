@@ -178,8 +178,8 @@ const DatosClaves = {
         { nombre: "Alexis Edwardr Sepúlveda Peña", cargo: "Teniente 1°" },
         { nombre: "Felipe Andrés Povea Saez", cargo: "Teniente 2°" },
         { nombre: "Brayan Enrique Huina Huechuqueo", cargo: "Teniente 3°" },
-        { nombre: "Jorge Alberto Rudolph Delgado-Perez", cargo: "Bombero Compañía" },
         { nombre: "Soledad Angélica Friz Friz", cargo: "Secretaria" },
+        { nombre: "Gabriela Francisca Valdebenito Jara", cargo: "Pro Secretaria" },
         { nombre: "Massiel Edith Jara Jara", cargo: "Tesorera" },
         { nombre: "Andrea Loreto Gabriela So Díaz Muñoz", cargo: "Pro Tesorero" },
         { nombre: "Alfredo Segundo San Martín Lizama", cargo: "Maquinista" },
@@ -196,7 +196,7 @@ const DatosClaves = {
         { nombre: "Daniela Andrea Castillo Quinchaleo", cargo: "Bombera Compañía" },
         { nombre: "Juan Isaac Colipi Huilipan", cargo: "Bombero Compañía" },
         { nombre: "Damariz Paulina Soto Fuentes", cargo: "Bombera Compañía" },
-        { nombre: "Gabriela Francisca Valdebenito Jara", cargo: "Pro Secretaria" },
+        { nombre: "Jorge Alberto Rudolph Delgado-Perez", cargo: "Bombero Compañía" },
         { nombre: "Alonso Julian Ignacio Lincoñir Herrera", cargo: "Bombero Compañía" },
         { nombre: "Eduardo Eliseo Olavarria Fischer", cargo: "Bombero Compañía" },
         { nombre: "Eduardo Alejandro Lepiqueo Levinao", cargo: "Bombero Compañía" },
@@ -384,6 +384,20 @@ window.irPaso1 = function() {
 
     const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
     document.getElementById("inp-fecha").value = now.toISOString().slice(0,16);
+
+    const inpFecha = document.getElementById("inp-fecha");
+    const exp = localStorage.getItem("sigo_oficial_exp");
+    const esOficial = exp && Date.now() < parseInt(exp);
+    if (esOficial) {
+        inpFecha.removeAttribute("min");
+        inpFecha.removeAttribute("max");
+    } else {
+        const ayer = new Date(); ayer.setDate(ayer.getDate() - 1); ayer.setHours(0,0,0,0);
+        ayer.setMinutes(ayer.getMinutes() - ayer.getTimezoneOffset());
+        inpFecha.min = ayer.toISOString().slice(0,16);
+        inpFecha.max = now.toISOString().slice(0,16);
+    }
+
     document.getElementById("inp-direccion").value = "";
     
     document.getElementById("inp-actividad-otra").style.display = "none";
@@ -420,6 +434,19 @@ window.irPaso2 = async function() {
     
     reporteTemporal.direccion = document.getElementById("inp-direccion").value;
     reporteTemporal.fecha = document.getElementById("inp-fecha").value;
+
+    const expCheck = localStorage.getItem("sigo_oficial_exp");
+    const esOficialCheck = expCheck && Date.now() < parseInt(expCheck);
+    if (!esOficialCheck) {
+        const fechaElegida = new Date(reporteTemporal.fecha);
+        const ahora = new Date();
+        const ayerLimite = new Date(); ayerLimite.setDate(ayerLimite.getDate() - 1); ayerLimite.setHours(0,0,0,0);
+        if (fechaElegida < ayerLimite || fechaElegida > ahora) {
+            alert("Como voluntario solo puedes registrar servicios del día de hoy o de ayer. Si necesitas registrar una fecha anterior, pide a un Ayudante que lo haga.");
+            return;
+        }
+    }
+
     reporteTemporal.pinEmergencia = Math.floor(100 + Math.random() * 900).toString();
 
     let maquinasTercera = Array.from(document.querySelectorAll(".chk-maquina:checked")).map(cb => cb.value);
