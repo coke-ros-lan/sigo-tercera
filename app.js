@@ -1,5 +1,5 @@
 // ==========================================
-// 1. CONFIGURACIÓN DE BASE DE DATOS Y MODO OFFLINE (SIGO 6.6)
+// 1. CONFIGURACIÓN DE BASE DE DATOS Y MODO OFFLINE (SIGO 7.0)
 // ==========================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, enableIndexedDbPersistence, collection, addDoc, getDocs, getDoc, updateDoc, deleteDoc, doc, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -61,7 +61,7 @@ setInterval(() => {
     if (exp && Date.now() > parseInt(exp)) {
         localStorage.removeItem("sigo_oficial_exp");
         aplicarPermisos();
-        alert("🔒 La sesión de Ayudante ha caducado por inactividad (10 minutos).");
+        alert("🔒 La sesión de Ayudante ha caducado por inactividad (30 minutos).");
         location.reload();
     }
 }, 30000);
@@ -122,7 +122,7 @@ async function verificarAdminPin() {
             localStorage.setItem("sigo_oficial_exp", Date.now() + (30 * 60 * 1000));
             cerrarPadAdmin();
             aplicarPermisos();
-            alert("✅ Modo Ayudante Activado por 10 minutos.");
+            alert("✅ Modo Ayudante Activado por 30 minutos.");
         } else {
             // PIN Incorrecto
             falloPin();
@@ -229,7 +229,7 @@ let reporteTemporal = {
 
 async function iniciarSistema() {
     const subMenu = document.querySelector(".subtitle-menu");
-    if(subMenu) subMenu.innerText = "SIGO Build 6.6";
+    if(subMenu) subMenu.innerText = "SIGO Build 7.0";
 
     aplicarPermisos();
     await inicializarDatosEnNube();
@@ -1700,7 +1700,7 @@ window.eliminarItem = async function(idItem) {
 }
 
 // ==========================================
-// 12. EXPORTACIÓN Y MATRIZ DE ASISTENCIA (ACTUALIZACIÓN 6.6)
+// 12. EXPORTACIÓN Y MATRIZ DE ASISTENCIA (ACTUALIZACIÓN 7.0)
 // ==========================================
 window.exportarCSV = function() {
     const dIni = document.getElementById("export-desde").value;
