@@ -119,7 +119,7 @@ async function verificarAdminPin() {
         
         if (docSnap.exists() && docSnap.data().pin === pinAdminIngresado) {
             // PIN Correcto
-            localStorage.setItem("sigo_oficial_exp", Date.now() + (10 * 60 * 1000));
+            localStorage.setItem("sigo_oficial_exp", Date.now() + (30 * 60 * 1000));
             cerrarPadAdmin();
             aplicarPermisos();
             alert("✅ Modo Ayudante Activado por 10 minutos.");
@@ -234,8 +234,32 @@ async function iniciarSistema() {
     aplicarPermisos();
     await inicializarDatosEnNube();
     conectarRadioEnTiempoReal(); 
+
+    if (new URLSearchParams(window.location.search).get("licencia") === "1") {
+        abrirModalLicenciaDirecto();
+    }
 }
 iniciarSistema();
+
+let yaAbrioLicenciaDirecta = false;
+function abrirModalLicenciaDirecto() {
+    if (yaAbrioLicenciaDirecta) return;
+    if (MEMORIA_BOMBEROS.length === 0 && DatosClaves.nominaOficial.length === 0) return;
+    yaAbrioLicenciaDirecta = true;
+
+    const menuBtn = document.getElementById("menu-toggle");
+    if (menuBtn) menuBtn.style.display = "none";
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar) sidebar.style.display = "none";
+
+    const hero = document.querySelector("#inicio .hero");
+    if (hero) hero.style.display = "none";
+
+    abrirModalLicencia();
+
+    const cerrarX = document.querySelector("#modal-licencia .close-btn");
+    if (cerrarX) cerrarX.style.display = "none";
+}
 
 async function inicializarDatosEnNube() {
     try {
