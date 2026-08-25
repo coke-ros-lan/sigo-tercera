@@ -24,7 +24,7 @@ try { enableIndexedDbPersistence(dbCloud); } catch (err) { console.warn("Modo of
 // NUEVO: SISTEMA DE SESIÓN AYUDANTES Y TECLADO
 // ==========================================
 let pinAdminIngresado = "";
-let criterioOrdenRanking = "asistencias"; 
+let criterioOrdenRanking = "cargo"; 
 
 function aplicarPermisos() {
     const exp = localStorage.getItem("sigo_oficial_exp");
@@ -1253,7 +1253,7 @@ window.cargarRankingPersonal = function() {
     
     const tituloSeccion = document.querySelector("#personal .title-header");
     if(tituloSeccion) {
-        tituloSeccion.innerText = esOficial ? "Ranking Operativo (Mando)" : "Nómina de Personal (Mes Actual)";
+        tituloSeccion.innerText = esOficial ? "Ficha Personal" : "Nómina de Personal (Mes Actual)";
     }
 
     const bomberos = [...(MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial)];
@@ -1289,7 +1289,8 @@ window.cargarRankingPersonal = function() {
 
     if (esOficial) {
         htmlControles = `
-            <div class="segmented-control" style="margin-bottom: 22px; max-width: 360px;">
+            <div class="segmented-control" style="margin-bottom: 22px; max-width: 480px;">
+                <div class="segment-btn ${criterioOrdenRanking === 'cargo' ? 'active' : ''}" onclick="window.cambiarCriterioRanking('cargo')">Por Cargo</div>
                 <div class="segment-btn ${criterioOrdenRanking === 'asistencias' ? 'active' : ''}" onclick="window.cambiarCriterioRanking('asistencias')">Por Asistencias</div>
                 <div class="segment-btn ${criterioOrdenRanking === 'faltas' ? 'active' : ''}" onclick="window.cambiarCriterioRanking('faltas')">Por Faltas</div>
             </div>
@@ -1297,8 +1298,14 @@ window.cargarRankingPersonal = function() {
 
         if (criterioOrdenRanking === "asistencias") {
             stats.sort((a, b) => b.totalAsistencias - a.totalAsistencias);
-        } else {
+        } else if (criterioOrdenRanking === "faltas") {
             stats.sort((a, b) => b.totalFaltas - a.totalFaltas);
+        } else {
+            stats.sort((a, b) => {
+                const indexA = DatosClaves.nominaOficial.findIndex(bom => bom.nombre === a.nombre);
+                const indexB = DatosClaves.nominaOficial.findIndex(bom => bom.nombre === b.nombre);
+                return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+            });
         }
     } else {
         stats.sort((a, b) => {
@@ -1309,13 +1316,13 @@ window.cargarRankingPersonal = function() {
     }
 
     const htmlCards = stats.map((b, i) => {
-        const ladoIzquierdo = esOficial ? 
+        const ladoIzquierdo = (esOficial && criterioOrdenRanking !== 'cargo') ? 
             `<div style="font-size: 1.5rem; font-weight: bold; color: ${i<3 ? 'var(--dorado)' : 'var(--texto-gris)'}; width: 40px;">#${i+1}</div>` : 
             `<div style="font-size: 1.5rem; color: var(--texto-gris); width: 40px; text-align: center;"><i class="fa-solid fa-user"></i></div>`;
             
-        const valorBadge = (criterioOrdenRanking === "asistencias" || !esOficial) ? 
-            `<div style="font-weight: bold; color: var(--verde-ok);">${b.totalAsistencias} Asistencias</div>` :
-            `<div style="font-weight: bold; color: var(--rojo-emergencia);">${b.totalFaltas} Faltas</div>`;
+        const valorBadge = (criterioOrdenRanking === "faltas" && esOficial) ? 
+            `<div style="font-weight: bold; color: var(--rojo-emergencia);">${b.totalFaltas} Faltas</div>` :
+            `<div style="font-weight: bold; color: var(--verde-ok);">${b.totalAsistencias} Asistencias</div>`;
 
         return `
         <div class="card-item" onclick='abrirFichaPersonal("${b.nombre}")' style="flex-direction: row; align-items: center;">
