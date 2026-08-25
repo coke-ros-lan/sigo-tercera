@@ -373,6 +373,7 @@ window.alCambiarActividad = function() {
     const inpOtra = document.getElementById("inp-actividad-otra");
     const contDoble = document.getElementById("contenedor-asistencia-doble");
     const chkDoble = document.getElementById("chk-asistencia-doble");
+    const chkObligatoria = document.getElementById("chk-asistencia-obligatoria");
 
     if (sel.value === "Otra (Especificar)") {
         inpOtra.style.display = "block";
@@ -385,9 +386,11 @@ window.alCambiarActividad = function() {
         const optgroup = sel.options[sel.selectedIndex].parentNode.label;
         if (optgroup === "Actividades Internas") {
             contDoble.style.display = "block";
+            chkObligatoria.checked = true;
         } else {
             contDoble.style.display = "none";
             chkDoble.checked = false;
+            chkObligatoria.checked = true;
         }
     }
 }
@@ -455,6 +458,7 @@ window.irPaso2 = async function() {
 
     reporteTemporal.actividad = act;
     reporteTemporal.esDoble = document.getElementById("chk-asistencia-doble").checked;
+    reporteTemporal.asistenciaObligatoria = reporteTemporal.esActividadInterna ? document.getElementById("chk-asistencia-obligatoria").checked : false;
     
     reporteTemporal.direccion = document.getElementById("inp-direccion").value;
     reporteTemporal.fecha = document.getElementById("inp-fecha").value;
@@ -588,7 +592,7 @@ window.irPaso3 = function() {
         let opcionesSegmentadas = "";
         let tieneLicencia = false;
 
-        if (reporteTemporal.esActividadInterna) {
+        if (reporteTemporal.esActividadInterna && reporteTemporal.asistenciaObligatoria) {
             // Revisión automática de licencias coincidentes
             const fechaActividad = new Date(reporteTemporal.fecha);
             fechaActividad.setHours(0,0,0,0);
@@ -608,6 +612,12 @@ window.irPaso3 = function() {
                     <div class="segment-btn ${!tieneLicencia ? 'active' : ''}" data-val="Falta" onclick="cambiarEstadoAsistencia(this, 'Falta')">Falta</div>
                     <div class="segment-btn" data-val="Asiste" onclick="cambiarEstadoAsistencia(this, 'Asiste')">Asiste</div>
                     <div class="segment-btn ${tieneLicencia ? 'active' : ''}" data-val="Licencia" onclick="cambiarEstadoAsistencia(this, 'Licencia')">Licencia</div>
+                </div>`;
+        } else if (reporteTemporal.esActividadInterna) {
+            opcionesSegmentadas = `
+                <div class="segmented-control">
+                    <div class="segment-btn active" data-val="No Asistió" onclick="cambiarEstadoAsistencia(this, 'No Asistió')">No Asistió</div>
+                    <div class="segment-btn" data-val="Asiste" onclick="cambiarEstadoAsistencia(this, 'Asiste')">Asiste</div>
                 </div>`;
         } else {
             opcionesSegmentadas = `
@@ -646,10 +656,12 @@ window.guardarReporteFinal = async function() {
         const nombre = card.getAttribute("data-nombre");
         const estado = card.querySelector(".segment-btn.active").getAttribute("data-val");
         
-        if (reporteTemporal.esActividadInterna) {
+        if (reporteTemporal.esActividadInterna && reporteTemporal.asistenciaObligatoria) {
             if (estado === "Asiste") reporteTemporal.asistentesNombres.push(nombre);
             else if (estado === "Licencia") reporteTemporal.licenciasNombres.push(nombre);
             else if (estado === "Falta") reporteTemporal.faltasNombres.push(nombre);
+        } else if (reporteTemporal.esActividadInterna) {
+            if (estado === "Asiste") reporteTemporal.asistentesNombres.push(nombre);
         } else {
             if (estado === "Participó") reporteTemporal.asistentesNombres.push(nombre);
         }
@@ -969,13 +981,16 @@ window.abrirEdicionReporte = function(id) {
     
     const contDobleEdit = document.getElementById("edit-contenedor-asistencia-doble");
     const chkDobleEdit = document.getElementById("edit-chk-asistencia-doble");
+    const chkObligatoriaEdit = document.getElementById("edit-chk-asistencia-obligatoria");
     
     if (r.esActividadInterna) {
         contDobleEdit.style.display = "block";
         chkDobleEdit.checked = r.esDoble === true;
+        chkObligatoriaEdit.checked = r.asistenciaObligatoria !== false;
     } else {
         contDobleEdit.style.display = "none";
         chkDobleEdit.checked = false;
+        chkObligatoriaEdit.checked = true;
     }
     
     const selReclasificacion = document.getElementById("edit-reclasificacion");
@@ -1013,6 +1028,8 @@ window.abrirEdicionReporte = function(id) {
         bomberosDB = bomberosDB.filter(b => DatosClaves.cargosJuntaOficiales.includes(b.cargo));
     }
 
+    const obligatoriaEdit = r.asistenciaObligatoria !== false;
+
     const htmlAsistencia = bomberosDB.map(b => {
         let opcionesSegmentadas = "";
         let estadoActual = r.esActividadInterna ? "Falta" : "No Participó"; 
@@ -1023,14 +1040,22 @@ window.abrirEdicionReporte = function(id) {
             estadoActual = "Licencia";
         } else if (r.faltasNombres && r.faltasNombres.includes(b.nombre)) {
             estadoActual = "Falta";
+        } else if (r.esActividadInterna && !obligatoriaEdit) {
+            estadoActual = "No Asistió";
         }
 
-        if (r.esActividadInterna) {
+        if (r.esActividadInterna && obligatoriaEdit) {
             opcionesSegmentadas = `
                 <div class="segmented-control">
                     <div class="segment-btn ${estadoActual === 'Falta' ? 'active' : ''}" data-val="Falta" onclick="cambiarEstadoAsistencia(this, 'Falta')">Falta</div>
                     <div class="segment-btn ${estadoActual === 'Asiste' ? 'active' : ''}" data-val="Asiste" onclick="cambiarEstadoAsistencia(this, 'Asiste')">Asiste</div>
                     <div class="segment-btn ${estadoActual === 'Licencia' ? 'active' : ''}" data-val="Licencia" onclick="cambiarEstadoAsistencia(this, 'Licencia')">Licencia</div>
+                </div>`;
+        } else if (r.esActividadInterna) {
+            opcionesSegmentadas = `
+                <div class="segmented-control">
+                    <div class="segment-btn ${estadoActual !== 'Asiste' ? 'active' : ''}" data-val="No Asistió" onclick="cambiarEstadoAsistencia(this, 'No Asistió')">No Asistió</div>
+                    <div class="segment-btn ${estadoActual === 'Asiste' ? 'active' : ''}" data-val="Asiste" onclick="cambiarEstadoAsistencia(this, 'Asiste')">Asiste</div>
                 </div>`;
         } else {
             opcionesSegmentadas = `
@@ -1062,6 +1087,7 @@ window.guardarEdicionReporte = async function() {
     const fec = new Date(document.getElementById("edit-fecha").value).getTime();
     const claveReclasificada = document.getElementById("edit-reclasificacion").value;
     const esDobleEdit = document.getElementById("edit-chk-asistencia-doble").checked;
+    const obligatoriaEdit = rEdit.esActividadInterna ? document.getElementById("edit-chk-asistencia-obligatoria").checked : false;
     
     let maqTercera = Array.from(document.querySelectorAll(".chk-edit-maquina:checked")).map(cb => cb.value);
     let maqApoyo = Array.from(document.querySelectorAll(".chk-edit-apoyo:checked")).map(cb => cb.value);
@@ -1081,10 +1107,12 @@ window.guardarEdicionReporte = async function() {
         const nombre = card.getAttribute("data-nombre");
         const estado = card.querySelector(".segment-btn.active").getAttribute("data-val");
         
-        if (rEdit.esActividadInterna) {
+        if (rEdit.esActividadInterna && obligatoriaEdit) {
             if (estado === "Asiste") asistentesNombresEdit.push(nombre);
             else if (estado === "Licencia") licenciasNombresEdit.push(nombre);
             else if (estado === "Falta") faltasNombresEdit.push(nombre);
+        } else if (rEdit.esActividadInterna) {
+            if (estado === "Asiste") asistentesNombresEdit.push(nombre);
         } else {
             if (estado === "Participó") asistentesNombresEdit.push(nombre);
         }
@@ -1099,7 +1127,8 @@ window.guardarEdicionReporte = async function() {
         licenciasNombres: licenciasNombresEdit,
         faltasNombres: faltasNombresEdit,
         claveFinal: claveReclasificada,
-        esDoble: esDobleEdit
+        esDoble: esDobleEdit,
+        asistenciaObligatoria: obligatoriaEdit
     });
     
     alert("Servicio actualizado correctamente.");
@@ -1635,7 +1664,7 @@ window.abrirDetalleMaquina = async function(id) {
             for(let item of inventarioBaseB3) {
                 await addDoc(collection(dbCloud, "inventario"), {
                     maquinaId: id, ubicacion: item.ubicacion, nombreItem: item.nombreItem, 
-                    cantidadTeorica: item.cant, cantidadActual: item.cant, estado: "Disponible"
+                    cantidadTeorica: item.cant, cantidadActual: item.cant, estado: "Operativo"
                 });
             }
         }
@@ -1661,9 +1690,11 @@ function renderizarItemsMaquina(id, esOficial) {
     const items = MEMORIA_INVENTARIO.filter(i => i.maquinaId === id && i.ubicacion === gavetaSeleccionada);
 
     document.getElementById("lista-items-maquina").innerHTML = items.length === 0 ? `<p style='color: var(--texto-gris); font-size: 0.9rem; text-align: center; margin-top: 10px;'><i class="fa-solid fa-box-open"></i> Gaveta ${gavetaSeleccionada} sin herramientas registradas.</p>` : items.map(i => {
-        const btnBorrar = esOficial ? `<button class="btn-text" style="color: var(--rojo-emergencia); padding: 5px;" onclick="eliminarItem('${i.id}')"><i class="fa-solid fa-trash"></i></button>` : "";
+        const btnBorrar = esOficial ? `<button class="btn-text" style="color: var(--rojo-emergencia); padding: 5px;" onclick="event.stopPropagation(); eliminarItem('${i.id}')"><i class="fa-solid fa-trash"></i></button>` : "";
+        const estadoItem = i.estado || "Operativo";
+        const colorSemaforo = estadoItem === "Operativo" ? "var(--verde-ok)" : (estadoItem === "Requiere Mantención" ? "var(--dorado)" : "var(--rojo-emergencia)");
         return `
-        <div style="background: rgba(0,0,0,0.3); padding: 12px 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid var(--dorado); margin-bottom: 8px;">
+        <div onclick="abrirPerfilHerramienta('${i.id}')" style="cursor: pointer; background: rgba(0,0,0,0.3); padding: 12px 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid ${colorSemaforo}; margin-bottom: 8px;">
             <div><div style="color: white; font-weight: bold; font-size: 0.95rem;">${i.nombreItem}</div><div style="color: var(--texto-gris); font-size: 0.8rem; margin-top: 3px;">Cantidad Requerida: <span style="color: white; font-weight: bold;">${i.cantidadActual}</span></div></div>
             ${btnBorrar}
         </div>`;
@@ -1686,7 +1717,10 @@ window.agregarItemInventario = async function() {
         ubicacion: gavetaSeleccionada, 
         cantidadTeorica: cant, 
         cantidadActual: cant, 
-        estado: "Disponible" 
+        estado: "Operativo",
+        codigo: "",
+        fechaPuestaServicio: "",
+        bitacora: []
     });
     
     document.getElementById("nuevo-item-nombre").value = "";
@@ -1696,6 +1730,92 @@ window.agregarItemInventario = async function() {
 window.eliminarItem = async function(idItem) {
     if(confirm("¿Seguro que deseas eliminar esta herramienta del inventario?")) {
         await deleteDoc(doc(dbCloud, "inventario", idItem));
+    }
+}
+
+let itemPerfilActualId = null;
+
+window.abrirPerfilHerramienta = function(idItem) {
+    itemPerfilActualId = idItem;
+    const item = MEMORIA_INVENTARIO.find(i => i.id === idItem);
+    if (!item) return;
+
+    document.getElementById("perfil-herr-nombre-titulo").innerText = item.nombreItem;
+    document.getElementById("perfil-herr-input-nombre").value = item.nombreItem || "";
+    document.getElementById("perfil-herr-input-cantteo").value = item.cantidadTeorica ?? 1;
+    document.getElementById("perfil-herr-input-cantact").value = item.cantidadActual ?? 1;
+    document.getElementById("perfil-herr-input-codigo").value = item.codigo || "";
+    document.getElementById("perfil-herr-input-fecha").value = item.fechaPuestaServicio || "";
+    document.getElementById("perfil-herr-input-estado").value = item.estado || "Operativo";
+
+    const resumen = document.getElementById("perfil-herr-resumen");
+    const estadoItem = item.estado || "Operativo";
+    const colorSemaforo = estadoItem === "Operativo" ? "var(--verde-ok)" : (estadoItem === "Requiere Mantención" ? "var(--dorado)" : "var(--rojo-emergencia)");
+    let badges = `<span style="background: ${colorSemaforo}; color: #051024; font-weight: bold; padding: 5px 12px; border-radius: 20px; font-size: 0.8rem;">${estadoItem}</span>`;
+    if (item.codigo) badges += `<span style="background: rgba(255,255,255,0.1); color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.8rem;"><i class="fa-solid fa-hashtag"></i> ${item.codigo}</span>`;
+    if (item.fechaPuestaServicio) badges += `<span style="background: rgba(255,255,255,0.1); color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.8rem;"><i class="fa-solid fa-calendar-check"></i> En servicio desde ${item.fechaPuestaServicio}</span>`;
+    resumen.innerHTML = badges;
+
+    document.getElementById("perfil-herr-nueva-texto").value = "";
+    renderizarBitacoraHerramienta(item.bitacora || []);
+
+    abrirModal("modal-perfil-herramienta");
+}
+
+function renderizarBitacoraHerramienta(bitacora) {
+    const cont = document.getElementById("perfil-herr-bitacora-lista");
+    if (!bitacora || bitacora.length === 0) {
+        cont.innerHTML = `<p style="color: var(--texto-gris); font-size: 0.85rem; text-align: center; padding: 10px 0;">Sin novedades registradas todavía.</p>`;
+        return;
+    }
+    const ordenada = [...bitacora].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    const colorTipo = { "Mantención": "var(--dorado)", "Falla": "var(--rojo-emergencia)", "Nota": "var(--texto-gris)" };
+    cont.innerHTML = ordenada.map(n => `
+        <div style="background: rgba(0,0,0,0.25); padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid ${colorTipo[n.tipo] || "var(--texto-gris)"};">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--texto-gris); margin-bottom: 4px;">
+                <span style="font-weight: bold; color: ${colorTipo[n.tipo] || "var(--texto-gris)"};">${n.tipo}</span>
+                <span>${new Date(n.fecha).toLocaleDateString()}</span>
+            </div>
+            <div style="color: white; font-size: 0.9rem;">${n.texto}</div>
+        </div>
+    `).join('');
+}
+
+window.guardarPerfilHerramienta = async function() {
+    if (!itemPerfilActualId) return;
+    const nombre = document.getElementById("perfil-herr-input-nombre").value.trim();
+    if (!nombre) { alert("El nombre no puede quedar vacío."); return; }
+
+    await updateDoc(doc(dbCloud, "inventario", itemPerfilActualId), {
+        nombreItem: nombre,
+        cantidadTeorica: parseInt(document.getElementById("perfil-herr-input-cantteo").value) || 1,
+        cantidadActual: parseInt(document.getElementById("perfil-herr-input-cantact").value) || 0,
+        codigo: document.getElementById("perfil-herr-input-codigo").value.trim(),
+        fechaPuestaServicio: document.getElementById("perfil-herr-input-fecha").value,
+        estado: document.getElementById("perfil-herr-input-estado").value
+    });
+    alert("✅ Ficha de la herramienta actualizada.");
+}
+
+window.agregarBitacoraHerramienta = async function() {
+    if (!itemPerfilActualId) return;
+    const texto = document.getElementById("perfil-herr-nueva-texto").value.trim();
+    const tipo = document.getElementById("perfil-herr-nueva-tipo").value;
+    if (!texto) { alert("Escribe la novedad antes de agregarla."); return; }
+
+    const item = MEMORIA_INVENTARIO.find(i => i.id === itemPerfilActualId);
+    const nuevaBitacora = [...(item.bitacora || []), { fecha: new Date().toISOString(), tipo, texto }];
+
+    await updateDoc(doc(dbCloud, "inventario", itemPerfilActualId), { bitacora: nuevaBitacora });
+    document.getElementById("perfil-herr-nueva-texto").value = "";
+    renderizarBitacoraHerramienta(nuevaBitacora);
+}
+
+window.eliminarItemDesdePerfil = async function() {
+    if (!itemPerfilActualId) return;
+    if (confirm("¿Seguro que deseas eliminar esta herramienta del inventario? Se perderá también su bitácora.")) {
+        await deleteDoc(doc(dbCloud, "inventario", itemPerfilActualId));
+        cerrarModal("modal-perfil-herramienta");
     }
 }
 

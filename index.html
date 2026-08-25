@@ -186,6 +186,9 @@
                     </div>
 
                     <div class="form-group" id="contenedor-asistencia-doble" style="display: none;">
+                        <label class="checkbox-item" style="border-color: var(--dorado); box-shadow: 0 4px 10px rgba(217, 178, 51, 0.1); margin-bottom: 10px;">
+                            <input type="checkbox" id="chk-asistencia-obligatoria" checked> <i class="fa-solid fa-clipboard-check" style="color: var(--dorado);"></i> Asistencia Obligatoria
+                        </label>
                         <label class="checkbox-item" style="border-color: var(--dorado); box-shadow: 0 4px 10px rgba(217, 178, 51, 0.1);">
                             <input type="checkbox" id="chk-asistencia-doble"> <i class="fa-solid fa-star" style="color: var(--dorado);"></i> Asistencia / Falta Doble
                         </label>
@@ -340,6 +343,9 @@
                 </div>
                 
                 <div class="form-group" id="edit-contenedor-asistencia-doble" style="display: none;">
+                    <label class="checkbox-item" style="border-color: var(--dorado); box-shadow: 0 4px 10px rgba(217, 178, 51, 0.1); margin-bottom: 10px;">
+                        <input type="checkbox" id="edit-chk-asistencia-obligatoria"> <i class="fa-solid fa-clipboard-check" style="color: var(--dorado);"></i> Asistencia Obligatoria
+                    </label>
                     <label class="checkbox-item" style="border-color: var(--dorado); box-shadow: 0 4px 10px rgba(217, 178, 51, 0.1);">
                         <input type="checkbox" id="edit-chk-asistencia-doble"> <i class="fa-solid fa-star" style="color: var(--dorado);"></i> Asistencia / Falta Doble
                     </label>
@@ -421,6 +427,67 @@
                     </div>
                     <button class="btn-secundary" style="width: 100%;" onclick="agregarItemInventario()">Guardar Herramienta</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-perfil-herramienta" class="modal">
+        <div class="modal-content glass-panel" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 id="perfil-herr-nombre-titulo">Herramienta</h2>
+                <span class="close-btn" onclick="cerrarModal('modal-perfil-herramienta')"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body">
+                <div id="perfil-herr-resumen" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;"></div>
+
+                <div class="form-group">
+                    <label>Nombre</label>
+                    <input type="text" id="perfil-herr-input-nombre" class="input-glass">
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Cantidad Teórica</label>
+                        <input type="number" id="perfil-herr-input-cantteo" class="input-glass">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Cantidad Actual</label>
+                        <input type="number" id="perfil-herr-input-cantact" class="input-glass">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Código / N° Interno</label>
+                        <input type="text" id="perfil-herr-input-codigo" class="input-glass" placeholder="Opcional">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Puesta en Servicio</label>
+                        <input type="date" id="perfil-herr-input-fecha" class="input-glass">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Estado</label>
+                    <select id="perfil-herr-input-estado" class="input-glass">
+                        <option value="Operativo">🟢 Operativo</option>
+                        <option value="Requiere Mantención">🟡 Requiere Mantención</option>
+                        <option value="Fuera de Servicio">🔴 Fuera de Servicio</option>
+                    </select>
+                </div>
+                <button class="btn-primary" style="width: 100%;" onclick="guardarPerfilHerramienta()"><i class="fa-solid fa-floppy-disk"></i> Guardar Cambios</button>
+
+                <h3 style="color: var(--dorado); margin: 25px 0 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">Bitácora de Novedades</h3>
+                <div id="perfil-herr-bitacora-lista" style="max-height: 220px; overflow-y: auto; margin-bottom: 15px; padding-right: 5px;"></div>
+
+                <div class="form-glass" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.2);">
+                    <select id="perfil-herr-nueva-tipo" class="input-glass" style="margin-bottom: 10px;">
+                        <option value="Nota">Nota</option>
+                        <option value="Mantención">Mantención</option>
+                        <option value="Falla">Falla en Servicio</option>
+                    </select>
+                    <textarea id="perfil-herr-nueva-texto" class="input-glass" placeholder="Describe la novedad, mantención o falla..." style="width: 100%; min-height: 70px; margin-bottom: 10px; resize: vertical;"></textarea>
+                    <button class="btn-secundary" style="width: 100%;" onclick="agregarBitacoraHerramienta()"><i class="fa-solid fa-plus"></i> Agregar a la Bitácora</button>
+                </div>
+
+                <button class="btn-text" style="color: var(--rojo-emergencia); margin-top: 20px; width: 100%; text-align: center;" onclick="eliminarItemDesdePerfil()"><i class="fa-solid fa-trash"></i> Eliminar Herramienta</button>
             </div>
         </div>
     </div>
