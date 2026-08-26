@@ -142,6 +142,19 @@ function falloPin() {
     }, 400);
 }
 
+document.addEventListener("keydown", (e) => {
+    const pad = document.getElementById("admin-pin-pad");
+    if (!pad || !pad.classList.contains("active")) return;
+
+    if (e.key >= "0" && e.key <= "9") {
+        pressAdminKey(e.key);
+    } else if (e.key === "Backspace") {
+        deleteAdminKey();
+    } else if (e.key === "Escape") {
+        cerrarPadAdmin();
+    }
+});
+
 // ==========================================
 // 2. DATOS INSTITUCIONALES TERCERA COMPAÑÍA
 // ==========================================
