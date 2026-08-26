@@ -1907,50 +1907,57 @@ window.exportarEquipoPersonal = function() {
 
     if (bomberos.length === 0) { alert("No hay personal registrado para exportar."); return; }
 
-    let csv = "N°;Nombre Completo;Cargo;";
-    csv += "EPP Estructural - Casco;EPP Estructural - Chaqueta;EPP Estructural - Jardinera;EPP Estructural - Botas;EPP Estructural - Guantes;EPP Estructural - Esclavina;";
-    csv += "EPP Multirol - Casco;EPP Multirol - Chaqueta;EPP Multirol - Pantalón;EPP Multirol - Botas\n";
+    const fila1 = ["N°", "Nombre Completo", "Cargo", "ESTRUCTURAL", "", "", "", "", "", "MULTIROL", "", "", ""];
+    const fila2 = ["", "", "", "Casco", "Chaqueta", "Jardinera", "Botas", "Guantes", "Esclavina", "Casco", "Chaqueta", "Pantalón", "Botas"];
 
-    bomberos.forEach((b, index) => {
+    const filasDatos = bomberos.map((b, index) => {
         const est = b.eppEstructural || {};
         const mul = b.eppMultirol || {};
-        const campos = [
+        return [
             index + 1, b.nombre, b.cargo,
             est.casco || "-", est.chaqueta || "-", est.jardinera || "-", est.botas || "-", est.guantes || "-", est.esclavina || "-",
             mul.casco || "-", mul.chaqueta || "-", mul.pantalon || "-", mul.botas || "-"
         ];
-        csv += campos.map(c => `"${String(c).replace(/"/g, '""')}"`).join(";") + "\n";
     });
 
-    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `Registro_Equipo_Personal_3ra_${new Date().toISOString().slice(0,10)}.csv`;
-    link.click();
+    const hoja = XLSX.utils.aoa_to_sheet([fila1, fila2, ...filasDatos]);
+    hoja["!merges"] = [
+        { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+        { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
+        { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
+        { s: { r: 0, c: 3 }, e: { r: 0, c: 8 } },
+        { s: { r: 0, c: 9 }, e: { r: 0, c: 12 } }
+    ];
+    hoja["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Equipo Personal");
+    XLSX.writeFile(libro, `Registro_Equipo_Personal_3ra_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 window.exportarInventarioUnidades = function() {
     if (MEMORIA_MAQUINAS.length === 0) { alert("No hay unidades registradas para exportar."); return; }
 
-    let csv = "Unidad;Estado Unidad;Ubicación/Gaveta;Herramienta;Cantidad Teórica;Cantidad Actual;Estado Ítem\n";
+    const encabezado = ["Unidad", "Ubicación/Gaveta", "Herramienta", "Cantidad Teórica", "Cantidad Actual", "Estado Ítem"];
+    const filasDatos = [];
 
     MEMORIA_MAQUINAS.forEach(m => {
         const items = MEMORIA_INVENTARIO.filter(i => i.maquinaId === m.id);
         if (items.length === 0) {
-            csv += [m.nomenclatura, m.estado, "-", "Sin herramientas registradas", "-", "-", "-"].map(c => `"${String(c).replace(/"/g, '""')}"`).join(";") + "\n";
+            filasDatos.push([m.nomenclatura, "-", "Sin herramientas registradas", "-", "-", "-"]);
         } else {
             items.forEach(i => {
-                const campos = [m.nomenclatura, m.estado, i.ubicacion, i.nombreItem, i.cantidadTeorica, i.cantidadActual, i.estado];
-                csv += campos.map(c => `"${String(c).replace(/"/g, '""')}"`).join(";") + "\n";
+                filasDatos.push([m.nomenclatura, i.ubicacion, i.nombreItem, i.cantidadTeorica, i.cantidadActual, i.estado || "Operativo"]);
             });
         }
     });
 
-    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `Inventario_Unidades_3ra_${new Date().toISOString().slice(0,10)}.csv`;
-    link.click();
+    const hoja = XLSX.utils.aoa_to_sheet([encabezado, ...filasDatos]);
+    hoja["!cols"] = [{ wch: 12 }, { wch: 16 }, { wch: 30 }, { wch: 16 }, { wch: 16 }, { wch: 18 }];
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Inventario Unidades");
+    XLSX.writeFile(libro, `Inventario_Unidades_3ra_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 window.confirmarBorradoTotal = async function() {
