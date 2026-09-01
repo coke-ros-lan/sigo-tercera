@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Central 1 - Despachos</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body class="central-body">
+
+    <div class="topbar">
+        <h1>CENTRAL DE ALARMAS</h1>
+        <div id="clock">00:00:00</div>
+    </div>
+
+    <div class="triptych">
+        
+        <div class="panel panel-left" id="panel-claves">
+            <h2 style="font-size: 1rem; margin-bottom: 5px;">CLAVES 10-X</h2>
+            <div class="claves-list" id="claves-list">
+                <button class="clave-btn" data-code="10-0" style="--clave-color: var(--c-red);" onclick="window.selectClave(this)">10-0 ESTRUCTURAL</button>
+                <button class="clave-btn" data-code="10-1" style="--clave-color: var(--c-red);" onclick="window.selectClave(this)">10-1 VEHÍCULOS</button>
+                <button class="clave-btn" data-code="10-2" style="--clave-color: var(--c-cyan);" onclick="window.selectClave(this)">10-2 PASTIZAL / BOSQUE</button>
+                <button class="clave-btn" data-code="10-3" style="--clave-color: var(--c-green);" onclick="window.selectClave(this)">10-3 RESCATE SIMPLE</button>
+                <button class="clave-btn" data-code="10-4" style="--clave-color: var(--c-green);" onclick="window.selectClave(this)">10-4 ACCIDENTE VEHICULAR</button>
+                <button class="clave-btn" data-code="10-5" style="--clave-color: var(--c-orange);" onclick="window.selectClave(this)">10-5 DERRAME QUÍMICO</button>
+                <button class="clave-btn" data-code="10-6" style="--clave-color: var(--c-orange);" onclick="window.selectClave(this)">10-6 EMANACIÓN GAS</button>
+                <button class="clave-btn" data-code="10-7" onclick="window.selectClave(this)">10-7 ELÉCTRICO</button>
+                <button class="clave-btn" data-code="10-8" onclick="window.selectClave(this)">10-8 NO CLASIFICADO</button>
+                <button class="clave-btn" data-code="10-9" onclick="window.selectClave(this)">10-9 OTROS SERVICIOS</button>
+                <button class="clave-btn" data-code="10-10" onclick="window.selectClave(this)">10-10 ESCOMBROS</button>
+                <button class="clave-btn" data-code="10-12" style="--clave-color: var(--c-red);" onclick="window.selectClave(this)">10-12 APOYO OTRO CUERPO</button>
+                <button class="clave-btn" data-code="10-14" style="--clave-color: var(--c-red);" onclick="window.selectClave(this)">10-14 ACCIDENTE AÉREO</button>
+                <button class="clave-btn" data-code="10-15" onclick="window.selectClave(this)">10-15 SIMULACRO</button>
+                <button class="clave-btn" data-code="10-17" onclick="window.selectClave(this)">10-17 INUNDACIÓN</button>
+            </div>
+        </div>
+
+        <div class="resizer" id="resizer-left"></div>
+
+        <div class="panel panel-center" id="panel-form">
+            <div class="dispatch-form-layout">
+                
+                <div class="mini-map">
+                    <div id="map"></div>
+                </div>
+
+                <div class="gps-btn-group">
+                    <button class="btn-gps-wa" id="btn-link-gps-wa">📱 GPS x WHATSAPP</button>
+                    <button class="btn-gps-sms" id="btn-link-gps-sms">✉️ GPS x SMS</button>
+                </div>
+
+                <div class="form-group" style="position: relative;">
+                    <input type="text" id="direccion" placeholder="Dirección Exacta, Nº e Intersección..." autocomplete="off">
+                    <ul id="address-suggestions" class="address-suggestions-list" style="display: none; position: absolute; width: 100%; background: var(--bg-panel); z-index: 9999; list-style: none; padding: 0; margin: 0; border: 1px solid var(--border-color); max-height: 200px; overflow-y: auto;"></ul>
+                </div>
+
+                <div class="form-group">
+                    <textarea id="observaciones" rows="2" placeholder="Observaciones / Pre-Informe..."></textarea>
+                    
+                    <label class="chk-atentado-container">
+                        <input type="checkbox" id="chk-atentado" style="width:18px; height:18px;">
+                        DESPACHAR COMO POSIBLE ATENTADO
+                    </label>
+                </div>
+                
+                <div class="form-footer-stick">
+                    <button class="btn-dispatch" onclick="window.despachar()">DESPACHAR EMERGENCIA</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="resizer" id="resizer-right"></div>
+
+        <div class="panel panel-right" id="panel-units">
+            <div class="units-section">
+                <h2>UNIDADES</h2>
+                <div class="units-grid">
+                    <button class="unit-btn" onclick="window.toggleUnit(this)">B-1</button>
+                    <button class="unit-btn" onclick="window.toggleUnit(this)">Z-1</button>
+                    <button class="unit-btn" onclick="window.toggleUnit(this)">BT-1</button>
+                    <button class="unit-btn" onclick="window.toggleUnit(this)">B-2</button>
+                    <button class="unit-btn" onclick="window.toggleUnit(this)">R-2</button>
+                    <button class="unit-btn" onclick="window.toggleUnit(this)">BX-2</button>
+                    <button class="unit-btn" onclick="window.toggleUnit(this)">B-3</button>
+                    <button class="unit-btn" onclick="window.toggleUnit(this)">BX-3</button>
+                    <button class="unit-btn" onclick="window.toggleUnit(this)">G-3</button>
+                </div>
+            </div>
+
+            <div class="maquinistas-section">
+                <h2>MAQUINISTAS</h2>
+                <div class="units-grid" id="turno-buttons">
+                    <button class="unit-btn" data-turno="91">91</button>
+                    <button class="unit-btn" data-turno="92">92</button>
+                    <button class="unit-btn" data-turno="93">93</button>
+                    <button class="unit-btn" data-turno="94">94</button>
+                </div>
+                <select class="maq-select" id="otros-select">
+                    <option value="">+ OTROS</option>
+                </select>
+            </div>
+
+            <div class="active-emergencies-container" id="active-emergencies-list" style="margin-top: 15px;">
+            </div>
+        </div>
+    </div>
+
+    <div style="position: fixed; bottom: 15px; right: 15px; z-index: 99999; background: var(--bg-panel); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+        <select id="vista-selector" onchange="window.location.href=this.value" style="background: transparent; color: var(--text-muted); border: none; font-size: 0.85rem; font-weight: bold; cursor: pointer; outline: none; text-transform: uppercase;">
+            <option value="index.html" style="background: var(--bg-dark); color: var(--text-light);">[0] INICIO</option>
+            <option value="central.html" style="background: var(--bg-dark); color: var(--text-light);">[1] CENTRAL 1 (DESPACHO)</option>
+            <option value="central2.html" style="background: var(--bg-dark); color: var(--text-light);">[2] CENTRAL 2 (TIEMPOS)</option>
+            <option value="gyras.html" style="background: var(--bg-dark); color: var(--text-light);">[3] GYRAS (HISTÓRICO)</option>
+            <option value="usuarios.html" style="background: var(--bg-dark); color: var(--text-light);">[4] USUARIOS</option>
+        </select>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, deleteDoc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA-NIM0pbgU2w85mWFhqUEkbA3L0_NrimI",
+            authDomain: "despachador-58fb8.firebaseapp.com",
+            projectId: "despachador-58fb8",
+            storageBucket: "despachador-58fb8.firebasestorage.app",
+            messagingSenderId: "1024295745401",
+            appId: "1:1024295745401:web:8d49683a86a8b1ff7aa1a8"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Mismo código de colores por tipo de clave que usa la app de voluntarios.
+        const CODE_COLORS = {
+            "10-0": "var(--c-red)", "10-1": "var(--c-red)",
+            "10-2": "var(--c-cyan)",
+            "10-3": "var(--c-green)", "10-4": "var(--c-green)",
+            "10-5": "var(--c-orange)", "10-6": "var(--c-orange)",
+            "10-12": "var(--c-red)", "10-14": "var(--c-red)",
+        };
+        function getCodeColor(code) {
+            return CODE_COLORS[(code || "").trim()] || "var(--c-gray)";
+        }
+
+        document.getElementById('vista-selector').value = 'central.html';
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toLocaleTimeString('es-CL', { hour12: false });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        let map = L.map('map', { zoomControl: false }).setView([-38.7423, -72.9538], 15);
+        const mapboxToken = 'pk.eyJ1Ijoiam9yZ2VsYW5kZXIiLCJhIjoiY21yazBmNngzMDBiNDJ5b2pkMjF3dHljbCJ9.cbcHOpTihe9Y-9l6HZHjAw';
+        
+        L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/{z}/{x}/{y}?access_token=${mapboxToken}`, {
+            maxZoom: 19,
+            attribution: '© Mapbox'
+        }).addTo(map);
+
+        let selectedClave = null;
+        let selectedUnits = [];
+        let selectedCoords = null; 
+        let dispatchMarker = null; 
+
+        const addressInput = document.getElementById('direccion');
+        const suggestionsList = document.getElementById('address-suggestions');
+        let timeoutId;
+
+        addressInput.addEventListener('input', (e) => {
+            clearTimeout(timeoutId);
+            const query = e.target.value;
+            if (query.length < 3) { suggestionsList.style.display = 'none'; return; }
+            
+            // Lógica optimizada para intersecciones chilenas
+            let searchQuery = query
+                .replace(/\bcon\b/gi, ' and ')
+                .replace(/\by\b/gi, ' and ')
+                .replace(/\besquina\b/gi, ' and ')
+                .replace(/\besq\.?\b/gi, ' and ')
+                .replace(/\bcruce\b/gi, ' and ');
+
+            // Oculta números si es una intersección para no confundir a Mapbox
+            if (searchQuery.includes(' and ')) {
+                searchQuery = searchQuery.replace(/[0-9]+/g, '');
+            }
+            
+            searchQuery += ', Nueva Imperial, Chile';
+            
+            const bboxImperial = '-73.10,-38.85,-72.80,-38.65';
+
+            timeoutId = setTimeout(() => {
+                fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?access_token=${mapboxToken}&bbox=${bboxImperial}&proximity=-72.9521597,-38.7446590&country=cl&language=es&limit=5`)
+                    .then(res => res.json())
+                    .then(data => {
+                        suggestionsList.innerHTML = '';
+                        if (data.features && data.features.length > 0) {
+                            data.features.forEach(place => {
+                                const li = document.createElement('li');
+                                li.style.padding = '10px';
+                                li.style.cursor = 'pointer';
+                                li.style.color = '#16181D';
+                                li.style.borderBottom = '1px solid #E4E6EA';
+                                
+                                let placeName = place.place_name.split(',')[0].trim();
+                                li.innerText = placeName;
+                                
+                                li.addEventListener('click', () => {
+                                    addressInput.value = placeName;
+                                    suggestionsList.style.display = 'none';
+                                    
+                                    selectedCoords = [place.center[1], place.center[0]]; 
+                                    map.setView(selectedCoords, 17);
+                                    
+                                    if (dispatchMarker) map.removeLayer(dispatchMarker);
+                                    dispatchMarker = L.marker(selectedCoords, {
+                                        icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41] })
+                                    }).addTo(map).bindPopup(`<b>Punto de Emergencia</b><br>${placeName}`).openPopup();
+                                });
+                                suggestionsList.appendChild(li);
+                            });
+                            suggestionsList.style.display = 'block';
+                        } else {
+                            suggestionsList.style.display = 'none';
+                        }
+                    }).catch(err => console.error("Error geocoding: ", err));
+            }, 500);
+        });
+
+        document.addEventListener('click', (e) => { if (e.target !== addressInput) suggestionsList.style.display = 'none'; });
+
+        window.selectClave = function(btn) {
+            document.querySelectorAll('.clave-btn').forEach(b => {
+                b.classList.remove('selected');
+                b.style.backgroundColor = 'var(--bg-panel)';
+            });
+            btn.classList.add('selected');
+            btn.style.backgroundColor = 'var(--c-blue)';
+            selectedClave = btn.getAttribute('data-code');
+        };
+
+        window.toggleUnit = function(btn) {
+            btn.classList.toggle('selected');
+            const unitName = btn.innerText;
+            if (btn.classList.contains('selected')) {
+                selectedUnits.push(unitName);
+                btn.style.backgroundColor = 'var(--c-orange)';
+            } else {
+                selectedUnits = selectedUnits.filter(u => u !== unitName);
+                btn.style.backgroundColor = 'var(--bg-dark)';
+            }
+        };
+
+        window.despachar = async function() {
+            const direccion = document.getElementById('direccion').value.toUpperCase();
+            const observaciones = document.getElementById('observaciones').value.toUpperCase();
+            const alarma = 0;
+            const isAtentado = document.getElementById('chk-atentado').checked;
+            
+            if (!selectedClave) return alert("Debe seleccionar una Clave 10-X");
+            if (!direccion) return alert("Debe ingresar una dirección");
+            if (selectedUnits.length === 0) return alert("Debe seleccionar al menos una Unidad");
+
+            let fullAddress = direccion;
+
+            let initialLogs = {};
+            selectedUnits.forEach(u => {
+                initialLogs[u] = { "6-0": "", "6-3": "", "6-7": "", "6-8": "", "6-9": "", "6-10": "", "km": "", "combustible": "" };
+            });
+
+            try {
+                const emIdNum = Date.now(); 
+
+                await setDoc(doc(db, "emergencias_activas", emIdNum.toString()), {
+                    id: emIdNum, 
+                    code: selectedClave,
+                    alarma: alarma,
+                    address: fullAddress,
+                    obs: observaciones,
+                    isAtentado: isAtentado,
+                    units: selectedUnits,
+                    logs: initialLogs,
+                    markerLatLng: selectedCoords ? { lat: selectedCoords[0], lng: selectedCoords[1] } : null, 
+                    timestamp: serverTimestamp()
+                });
+
+                document.getElementById('direccion').value = '';
+                document.getElementById('observaciones').value = '';
+                document.getElementById('chk-atentado').checked = false;
+                
+                selectedClave = null;
+                selectedUnits = [];
+                selectedCoords = null;
+                if (dispatchMarker) { map.removeLayer(dispatchMarker); dispatchMarker = null; }
+                
+                document.querySelectorAll('.clave-btn').forEach(b => {
+                    b.classList.remove('selected');
+                    b.style.backgroundColor = 'var(--bg-panel)';
+                });
+                document.querySelectorAll('.unit-btn').forEach(b => {
+                    b.classList.remove('selected');
+                    b.style.backgroundColor = 'var(--bg-dark)';
+                });
+                
+                alert("¡Despacho realizado con éxito!");
+            } catch (e) {
+                console.error("Error despachando: ", e);
+                alert("Error de conexión al despachar.");
+            }
+        };
+
+        onSnapshot(collection(db, "emergencias_activas"), (snapshot) => {
+            const container = document.getElementById('active-emergencies-list');
+            container.innerHTML = '<h2 style="font-size: 1rem; margin-bottom: 10px; color: var(--text-light);">Emergencias Activas</h2>';
+            
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                const emId = docSnap.id;
+                
+                let card = document.createElement('div');
+                card.style.backgroundColor = 'var(--bg-panel)';
+                card.style.border = '1px solid var(--border-color)';
+                card.style.borderLeft = `4px solid ${getCodeColor(data.code)}`;
+                card.style.borderRadius = '6px';
+                card.style.padding = '15px';
+                card.style.marginBottom = '10px';
+                
+                let timeStr = "--:--";
+                if(data.timestamp) {
+                    timeStr = data.timestamp.toDate().toLocaleTimeString('es-CL', { hour12: false, hour: '2-digit', minute:'2-digit' });
+                }
+
+                let headerText = data.code + (data.alarma > 0 ? " (" + data.alarma + "ª Alarma)" : "");
+                
+                let htmlAlarma = '';
+                if (data.code === '10-0' || data.code === '10-2') {
+                    let enCurso = false;
+                    
+                    if (data.logs) {
+                        Object.values(data.logs).forEach(log => {
+                            if (log["6-0"] && log["6-0"].trim() !== "") {
+                                enCurso = true;
+                            }
+                        });
+                    }
+                    
+                    if (enCurso || data.alarma > 0) {
+                        htmlAlarma = `
+                        <div style="background: var(--bg-dark); border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between;">
+                            <label style="color: var(--text-muted); font-weight: bold; font-size: 0.85rem;">NIVEL DE ALARMA:</label>
+                            <select onchange="window.actualizarAlarma('${emId}', this.value)" style="background: var(--bg-panel); color: var(--text-light); border: 1px solid var(--border-color); padding: 5px; border-radius: 4px; font-weight: bold; outline: none; cursor: pointer;">
+                                <option value="0" ${data.alarma === 0 ? 'selected' : ''}>Despacho Inicial</option>
+                                <option value="1" ${data.alarma === 1 ? 'selected' : ''}>1ª Alarma</option>
+                                <option value="2" ${data.alarma === 2 ? 'selected' : ''}>2ª Alarma</option>
+                                <option value="3" ${data.alarma === 3 ? 'selected' : ''}>3ª Alarma</option>
+                            </select>
+                        </div>`;
+                    } else {
+                        htmlAlarma = `
+                        <div style="background: var(--bg-dark); border: 1px dashed var(--border-color); padding: 10px; border-radius: 4px; margin-top: 10px; text-align: center;">
+                            <span style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">Esperando clave 6-0 (Salida) para habilitar Alarmas...</span>
+                        </div>`;
+                    }
+                }
+
+                card.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
+                        <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-light);">${headerText}</h3>
+                        <span style="color:var(--text-muted); font-size:0.85rem; font-weight:bold;">${timeStr}</span>
+                    </div>
+                    <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);"><strong>Lugar:</strong> ${data.address}</p>
+                    <p style="margin: 0; font-size: 0.9rem; color: var(--text-muted);"><strong>Unidades:</strong> ${(data.units || []).join(', ')}</p>
+                    ${data.isAtentado ? '<p style="color:var(--c-red); font-weight:bold; font-size:0.9rem; margin-top:5px; margin-bottom:0;">⚠️ POSIBLE ATENTADO</p>' : ''}
+                    
+                    ${htmlAlarma}
+
+                    <button style="margin-top:10px; width: 100%; padding:8px; background: transparent; border: 1px solid var(--c-red); color: var(--c-red); border-radius: 4px; font-weight: bold; cursor: pointer;" onclick="window.cerrarEmergencia('${emId}')">FINALIZAR EMERGENCIA Y ARCHIVAR</button>
+                `;
+                container.appendChild(card);
+            });
+        });
+
+        window.actualizarAlarma = async function(id, nuevaAlarma) {
+            try {
+                const docRef = doc(db, "emergencias_activas", id);
+                await updateDoc(docRef, { alarma: parseInt(nuevaAlarma) });
+            } catch(e) {
+                console.error("Error actualizando alarma:", e);
+                alert("Error de conexión al actualizar el nivel de alarma.");
+            }
+        };
+
+        window.cerrarEmergencia = async function(id) {
+            if(confirm('¿Está seguro de finalizar esta emergencia? Pasará automáticamente al historial GYRAS.')) {
+                try {
+                    const docRef = doc(db, "emergencias_activas", id);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        
+                        data.fecha_termino = new Date().toISOString();
+                        
+                        await setDoc(doc(db, "historial_emergencias", id.toString()), data);
+                        await deleteDoc(docRef);
+                    }
+                } catch(e) {
+                    console.error("Error al cerrar y archivar: ", e);
+                    alert("Ocurrió un error al intentar archivar la emergencia.");
+                }
+            }
+        };
+
+        document.getElementById('btn-link-gps-wa').addEventListener('click', () => generarLinkGPS('wa'));
+        document.getElementById('btn-link-gps-sms').addEventListener('click', () => generarLinkGPS('sms'));
+
+        function generarLinkGPS(metodo) {
+            const currentLinkId = Math.floor(Math.random() * 10000).toString();
+            const urlBase = window.location.origin + window.location.pathname.replace('central.html', '');
+            const linkFinal = `${urlBase}loc.html?id=${currentLinkId}`;
+            const mensaje = `🚨 *Bomberos Nueva Imperial* 🚨\nPara enviar la unidad de emergencia al lugar exacto, necesitamos su ubicación.\n\nHaga clic en el siguiente enlace y presione "ENVIAR MI UBICACIÓN":\n${linkFinal}`;
+            
+            navigator.clipboard.writeText(linkFinal).catch(err => console.error(err));
+            
+            if (metodo === 'wa') {
+                window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, '_blank');
+            } else if (metodo === 'sms') {
+                window.open(`sms:?body=${encodeURIComponent(mensaje)}`, '_self');
+            }
+            
+            onSnapshot(doc(db, "ubicaciones_externas", currentLinkId), (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    document.getElementById('direccion').value = "UBICACIÓN OBTENIDA VÍA LINK GPS";
+                    selectedCoords = [data.lat, data.lng]; 
+                    map.setView(selectedCoords, 17);
+                    if (dispatchMarker) map.removeLayer(dispatchMarker);
+                    dispatchMarker = L.marker(selectedCoords, {
+                        icon: L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41] })
+                    }).addTo(map).bindPopup("<b>ALERTA</b><br>Ubicación reportada").openPopup();
+                    alert("¡El usuario ha compartido su ubicación con éxito!");
+                }
+            });
+        }
+
+        // ==========================================
+        // MAQUINISTAS: los 4 de planta + "otros" (voluntarios disponibles de la app)
+        // ==========================================
+        const turnoButtonsArr = Array.from(document.querySelectorAll('#turno-buttons .unit-btn'));
+        const otrosSelect = document.getElementById('otros-select');
+        const turnoDocRef = doc(db, "turno_cuartel", "actual");
+
+        turnoButtonsArr.forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const yaActivo = btn.classList.contains('selected');
+                const valor = yaActivo ? null : btn.dataset.turno;
+                try {
+                    await setDoc(turnoDocRef, { enTurno: valor, timestamp: Date.now() });
+                } catch (error) {
+                    console.error("Error guardando el turno:", error);
+                    alert("No se pudo guardar el turno. Revisa tu conexión.");
+                }
+            });
+        });
+
+        otrosSelect.addEventListener('change', async () => {
+            try {
+                await setDoc(turnoDocRef, { enTurno: otrosSelect.value || null, timestamp: Date.now() });
+            } catch (error) {
+                console.error("Error guardando el turno:", error);
+                alert("No se pudo guardar el turno. Revisa tu conexión.");
+            }
+        });
+
+        onSnapshot(collection(db, "maquinistas"), (snapshot) => {
+            const disponibles = [];
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                if (data.estado === 'disponible') disponibles.push(data.nombre || 'Sin nombre');
+            });
+            disponibles.sort((a, b) => a.localeCompare(b));
+
+            const seleccionActual = otrosSelect.value;
+            otrosSelect.innerHTML = '<option value="">+ OTROS</option>' +
+                disponibles.map((nombre) => `<option value="${nombre}">${nombre}</option>`).join('');
+            if (disponibles.includes(seleccionActual)) otrosSelect.value = seleccionActual;
+        }, (error) => console.error("Error leyendo voluntarios disponibles:", error));
+
+        onSnapshot(turnoDocRef, (snap) => {
+            const enTurno = snap.exists() ? snap.data().enTurno : null;
+
+            turnoButtonsArr.forEach((btn) => {
+                const activo = btn.dataset.turno === enTurno;
+                btn.classList.toggle('selected', activo);
+                btn.style.backgroundColor = activo ? 'var(--c-orange)' : 'var(--bg-dark)';
+            });
+
+            const esUnoDeLosCuatro = turnoButtonsArr.some((btn) => btn.dataset.turno === enTurno);
+            otrosSelect.value = esUnoDeLosCuatro ? '' : (enTurno || '');
+        }, (error) => console.error("Error leyendo el turno:", error));
+    </script>
+</body>
+</html>
