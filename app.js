@@ -25,16 +25,65 @@ try { enableIndexedDbPersistence(dbCloud); } catch (err) { console.warn("Modo of
 // ==========================================
 let pinAdminIngresado = "";
 let criterioOrdenRanking = "cargo"; 
+let MEMORIA_OFICIALES = [];
+
+// Catálogo de permisos que se pueden asignar a cada oficial
+const CATALOGO_PERMISOS = [
+    { key: "editar_servicios", grupo: "Servicios", label: "Editar, cerrar, fusionar y eliminar servicios", desc: "También permite registrar servicios con fechas atrasadas y ver el PIN de servicios en curso." },
+    { key: "historico", grupo: "Servicios", label: "Ver meses anteriores", desc: "Historial, estadísticas y fichas sin el límite del mes actual." },
+    { key: "licencias", grupo: "Personal", label: "Registro de Licencias", desc: "Ver y resolver las licencias solicitadas." },
+    { key: "personal", grupo: "Personal", label: "Fichas de Personal", desc: "Ver fichas, asistencias y faltas de cada voluntario." },
+    { key: "editar_epp", grupo: "Personal", label: "Asignar / editar EPP", desc: "Modificar el equipo personal de los voluntarios." },
+    { key: "estadisticas", grupo: "Operación", label: "Estadísticas Operativas", desc: "" },
+    { key: "mapa", grupo: "Operación", label: "Mapa Operacional", desc: "" },
+    { key: "material", grupo: "Material Mayor", label: "Ver Material Mayor", desc: "Ver unidades, gavetas y fichas de herramientas." },
+    { key: "editar_material", grupo: "Material Mayor", label: "Editar inventario y unidades", desc: "Agregar, editar o eliminar herramientas, bitácora y estado de las unidades." },
+    { key: "exportar", grupo: "Administración", label: "Exportar Reportes", desc: "" },
+    { key: "gestionar_oficiales", grupo: "Administración", label: "Gestión de Oficiales", desc: "Crear oficiales, asignar PIN y permisos." }
+];
+
+(function inyectarReglasPermisos() {
+    const reglas = CATALOGO_PERMISOS.map(p => `body:not(.perm-${p.key}) .req-perm-${p.key} { display: none !important; }`).join("\n");
+    const tag = document.createElement("style");
+    tag.id = "sigo-reglas-permisos";
+    tag.textContent = reglas;
+    document.head.appendChild(tag);
+})();
+
+function obtenerSesion() {
+    const exp = localStorage.getItem("sigo_oficial_exp");
+    if (!exp || Date.now() > parseInt(exp)) return null;
+    try {
+        const s = JSON.parse(localStorage.getItem("sigo_sesion") || "null");
+        // Sesiones antiguas (solo PIN maestro) sin datos guardados se tratan como Ayudante maestro
+        return s || { esMaestro: true, nombre: "Ayudante", cargo: "Ayudante", permisos: [] };
+    } catch(e) { return null; }
+}
+
+function tienePermiso(key) {
+    const s = obtenerSesion();
+    if (!s) return false;
+    if (s.esMaestro) return true;
+    return (s.permisos || []).includes(key);
+}
+window.tienePermiso = tienePermiso;
+
+function cerrarSesionOficial() {
+    localStorage.removeItem("sigo_oficial_exp");
+    localStorage.removeItem("sigo_sesion");
+}
 
 function aplicarPermisos() {
-    const exp = localStorage.getItem("sigo_oficial_exp");
-    const esOficial = exp && Date.now() < parseInt(exp);
+    const sesion = obtenerSesion();
     const btnPerfil = document.getElementById("btn-perfil");
 
-    if (esOficial) {
+    CATALOGO_PERMISOS.forEach(p => document.body.classList.toggle(`perm-${p.key}`, tienePermiso(p.key)));
+
+    if (sesion) {
         document.body.classList.add("modo-oficial");
         if(btnPerfil) {
-            btnPerfil.innerHTML = `<i class="fa-solid fa-user-shield"></i> Perfil: Ayudante (Activo)`;
+            const etiqueta = sesion.esMaestro ? "Ayudante" : `${sesion.cargo} · ${sesion.nombre.split(" ")[0]}`;
+            btnPerfil.innerHTML = `<i class="fa-solid fa-user-shield"></i> Perfil: ${etiqueta} (Activo)`;
             btnPerfil.style.color = "var(--dorado)";
         }
     } else {
@@ -44,11 +93,22 @@ function aplicarPermisos() {
             btnPerfil.style.color = "rgba(255,255,255,0.4)";
         }
     }
+
+    // Si la vista actual quedó sin permiso, volver al Inicio
+    const vistaActiva = document.querySelector(".view-section.active");
+    if (vistaActiva && getComputedStyle(vistaActiva).display === "none" && vistaActiva.id !== "inicio") {
+        document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        document.getElementById("inicio").classList.add("active");
+        const navInicio = document.querySelector(".nav-menu .nav-item");
+        if (navInicio) navInicio.classList.add("active");
+    }
     
-    // Refrescar las vistas en pantalla para aplicar los bloqueos de fecha dinámicos
+    // Refrescar las vistas en pantalla para aplicar los bloqueos dinámicos
     if(document.getElementById('historial') && document.getElementById('historial').classList.contains('active')) cargarHistorial();
     if(document.getElementById('estadisticas') && document.getElementById('estadisticas').classList.contains('active')) actualizarDashboard();
     if(document.getElementById('personal') && document.getElementById('personal').classList.contains('active')) cargarRankingPersonal();
+    if(document.getElementById('oficiales-vista') && document.getElementById('oficiales-vista').classList.contains('active')) cargarListaOficiales();
     
     // Si la ficha está abierta, refrescarla en vivo
     if(document.getElementById('modal-ficha-personal') && document.getElementById('modal-ficha-personal').style.display === "block" && bomberoFichaActual) {
@@ -59,18 +119,19 @@ function aplicarPermisos() {
 setInterval(() => {
     const exp = localStorage.getItem("sigo_oficial_exp");
     if (exp && Date.now() > parseInt(exp)) {
-        localStorage.removeItem("sigo_oficial_exp");
+        cerrarSesionOficial();
         aplicarPermisos();
-        alert("🔒 La sesión de Ayudante ha caducado por inactividad (30 minutos).");
+        alert("🔒 La sesión de oficial ha caducado por inactividad (30 minutos).");
         location.reload();
     }
 }, 30000);
 
 window.abrirPadAdmin = function() {
-    const exp = localStorage.getItem("sigo_oficial_exp");
-    if (exp && Date.now() < parseInt(exp)) {
-        if(confirm("¿Cerrar la sesión de Ayudante y volver a Voluntario?")) {
-            localStorage.removeItem("sigo_oficial_exp");
+    const sesion = obtenerSesion();
+    if (sesion) {
+        const quien = sesion.esMaestro ? "Ayudante" : sesion.nombre;
+        if(confirm(`Sesión activa: ${quien}.\n¿Cerrar la sesión y volver a Voluntario?`)) {
+            cerrarSesionOficial();
             aplicarPermisos();
             location.reload();
         }
@@ -110,21 +171,31 @@ function actualizarAdminDots() {
     });
 }
 
-// NUEVA FUNCIÓN DE VERIFICACIÓN BLINDADA
+// VERIFICACIÓN DE PIN: PIN maestro de Ayudante o PIN personal de cada oficial
 async function verificarAdminPin() {
+    const pin = pinAdminIngresado;
     try {
-        // Vamos a Firebase a buscar el PIN real
-        const docRef = doc(dbCloud, "configuracion", "admin");
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists() && docSnap.data().pin === pinAdminIngresado) {
-            // PIN Correcto
+        const docSnap = await getDoc(doc(dbCloud, "configuracion", "admin"));
+        let sesion = null;
+
+        if (docSnap.exists() && docSnap.data().pin === pin) {
+            sesion = { esMaestro: true, nombre: "Ayudante", cargo: "Ayudante", permisos: [] };
+        } else {
+            const snap = await getDocs(collection(dbCloud, "oficiales"));
+            const oficial = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(o => o.pin === pin && o.activo !== false);
+            if (oficial) {
+                sesion = { esMaestro: false, id: oficial.id, nombre: oficial.nombre, cargo: oficial.cargo, permisos: oficial.permisos || [] };
+            }
+        }
+
+        if (sesion) {
             localStorage.setItem("sigo_oficial_exp", Date.now() + (30 * 60 * 1000));
+            localStorage.setItem("sigo_sesion", JSON.stringify(sesion));
             cerrarPadAdmin();
             aplicarPermisos();
-            alert("✅ Modo Ayudante Activado por 30 minutos.");
+            const quien = sesion.esMaestro ? "Modo Ayudante" : `Bienvenido/a ${sesion.cargo} ${sesion.nombre.split(" ")[0]}`;
+            alert(`✅ ${quien}. Sesión activa por 30 minutos.`);
         } else {
-            // PIN Incorrecto
             falloPin();
         }
     } catch(e) {
@@ -324,10 +395,38 @@ function conectarRadioEnTiempoReal() {
     onSnapshot(collection(dbCloud, "inventario"), (snapshot) => {
         MEMORIA_INVENTARIO = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
         if(document.getElementById('modal-detalle-maquina').style.display === "block" && maquinaEditandoId) {
-            const exp = localStorage.getItem("sigo_oficial_exp");
-            const esOficial = exp && Date.now() < parseInt(exp);
+            const esOficial = tienePermiso("editar_material");
             renderizarItemsMaquina(maquinaEditandoId, esOficial);
         }
+    });
+
+    onSnapshot(collection(dbCloud, "oficiales"), (snapshot) => {
+        MEMORIA_OFICIALES = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        MEMORIA_OFICIALES.sort((a, b) => {
+            const iA = DatosClaves.nominaOficial.findIndex(bom => bom.nombre === a.nombre);
+            const iB = DatosClaves.nominaOficial.findIndex(bom => bom.nombre === b.nombre);
+            return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
+        });
+
+        // Si hay un oficial con sesión abierta, sus permisos se actualizan al instante
+        const sesion = obtenerSesion();
+        if (sesion && !sesion.esMaestro && sesion.id) {
+            const actual = MEMORIA_OFICIALES.find(o => o.id === sesion.id);
+            if (!actual || actual.activo === false) {
+                cerrarSesionOficial();
+                alert("🔒 Tu perfil de oficial fue desactivado o eliminado. Se cerró la sesión.");
+                location.reload();
+                return;
+            }
+            const permisosAntes = JSON.stringify(sesion.permisos || []);
+            sesion.permisos = actual.permisos || [];
+            sesion.cargo = actual.cargo;
+            sesion.nombre = actual.nombre;
+            localStorage.setItem("sigo_sesion", JSON.stringify(sesion));
+            if (permisosAntes !== JSON.stringify(sesion.permisos)) aplicarPermisos();
+        }
+
+        if(document.getElementById('oficiales-vista') && document.getElementById('oficiales-vista').classList.contains('active')) cargarListaOficiales();
     });
 
     onSnapshot(collection(dbCloud, "licencias"), (snapshot) => {
@@ -360,6 +459,7 @@ window.switchView = function(viewId, element) {
     if (viewId === 'personal') cargarRankingPersonal();
     if (viewId === 'inventario') cargarInventarioCarros();
     if (viewId === 'licencias-vista') cargarListaLicencias();
+    if (viewId === 'oficiales-vista') cargarListaOficiales();
 }
 
 // ==========================================
@@ -426,8 +526,7 @@ window.irPaso1 = function() {
     document.getElementById("inp-fecha").value = now.toISOString().slice(0,16);
 
     const inpFecha = document.getElementById("inp-fecha");
-    const exp = localStorage.getItem("sigo_oficial_exp");
-    const esOficial = exp && Date.now() < parseInt(exp);
+    const esOficial = tienePermiso("editar_servicios");
     if (esOficial) {
         inpFecha.removeAttribute("min");
         inpFecha.removeAttribute("max");
@@ -476,8 +575,7 @@ window.irPaso2 = async function() {
     reporteTemporal.direccion = document.getElementById("inp-direccion").value;
     reporteTemporal.fecha = document.getElementById("inp-fecha").value;
 
-    const expCheck = localStorage.getItem("sigo_oficial_exp");
-    const esOficialCheck = expCheck && Date.now() < parseInt(expCheck);
+    const esOficialCheck = tienePermiso("editar_servicios");
     if (!esOficialCheck) {
         const fechaElegida = new Date(reporteTemporal.fecha);
         const ahora = new Date();
@@ -829,8 +927,7 @@ async function confirmarAsistenciaFirebase(idRep, nombreBombero) {
 // 7. HISTORIAL Y EDICIÓN
 // ==========================================
 function cargarHistorial() {
-    const exp = localStorage.getItem("sigo_oficial_exp");
-    const esOficial = exp && Date.now() < parseInt(exp);
+    const esOficial = tienePermiso("historico");
     
     let reportes = MEMORIA_REPORTES;
 
@@ -869,8 +966,7 @@ function cargarHistorial() {
 }
 
 window.verDetalleReporte = function(id) {
-    const exp = localStorage.getItem("sigo_oficial_exp");
-    const esOficial = exp && Date.now() < parseInt(exp);
+    const esOficial = tienePermiso("editar_servicios");
 
     const r = MEMORIA_REPORTES.find(rep => rep.id === id);
     const d = new Date(r.fecha);
@@ -906,7 +1002,7 @@ window.verDetalleReporte = function(id) {
     }
     
     html += `
-        <div class="req-oficial" style="display: flex; gap: 10px; margin-top: 25px; flex-wrap: wrap;">
+        <div class="req-perm-editar_servicios" style="display: flex; gap: 10px; margin-top: 25px; flex-wrap: wrap;">
             <button class="btn-secundary" style="flex: 1;" onclick="abrirEdicionReporte('${id}')"><i class="fa-solid fa-pen"></i> Editar / Cerrar</button>
             <button class="btn-secundary" style="flex: 1; color: var(--dorado); border-color: var(--dorado);" onclick="abrirSelectorFusion('${id}')"><i class="fa-solid fa-code-merge"></i> Fusionar Duplicado</button>
             <button class="btn-secundary" style="flex: 1; color: var(--rojo-emergencia); border-color: var(--rojo-emergencia);" onclick="borrarReporte('${id}')"><i class="fa-solid fa-trash"></i> Eliminar</button>
@@ -923,6 +1019,7 @@ function unionListas(a, b) {
 }
 
 window.abrirSelectorFusion = function(id) {
+    if (!tienePermiso("editar_servicios")) { alert("🔒 No tienes permiso para esta acción."); return; }
     reporteFusionActual = id;
     const principal = MEMORIA_REPORTES.find(rep => rep.id === id);
     if (!principal) return;
@@ -949,6 +1046,7 @@ window.abrirSelectorFusion = function(id) {
 }
 
 window.confirmarFusionServicio = async function() {
+    if (!tienePermiso("editar_servicios")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const idDup = document.getElementById("fusion-select-duplicado").value;
     if (!idDup) { alert("Selecciona el servicio duplicado a fusionar."); return; }
 
@@ -985,6 +1083,7 @@ window.confirmarFusionServicio = async function() {
 let reporteEditandoId = null;
 
 window.abrirEdicionReporte = function(id) {
+    if (!tienePermiso("editar_servicios")) { alert("🔒 No tienes permiso para esta acción."); return; }
     reporteEditandoId = id;
     const r = MEMORIA_REPORTES.find(rep => rep.id === id);
     cerrarModal("modal-detalle-reporte");
@@ -1094,6 +1193,7 @@ window.abrirEdicionReporte = function(id) {
 }
 
 window.guardarEdicionReporte = async function() {
+    if (!tienePermiso("editar_servicios")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const rEdit = MEMORIA_REPORTES.find(rep => rep.id === reporteEditandoId);
     const estSer = document.getElementById("edit-estado-servicio").value;
     const dir = document.getElementById("edit-direccion").value;
@@ -1149,6 +1249,7 @@ window.guardarEdicionReporte = async function() {
 }
 
 window.borrarReporte = async function(id) {
+    if (!tienePermiso("editar_servicios")) { alert("🔒 No tienes permiso para esta acción."); return; }
     if(confirm("¿Estás seguro de eliminar este servicio? Esta acción no se puede deshacer.")) {
         await deleteDoc(doc(dbCloud, "reportes", id));
         cerrarModal("modal-detalle-reporte");
@@ -1189,8 +1290,7 @@ function inicializarMapaGlobal() {
 // 9. DASHBOARD Y ESTADÍSTICAS
 // ==========================================
 window.actualizarDashboard = function() {
-    const exp = localStorage.getItem("sigo_oficial_exp");
-    const esOficial = exp && Date.now() < parseInt(exp);
+    const esOficial = tienePermiso("historico");
     const selFiltro = document.getElementById("filtro-tiempo");
 
     // BLOQUEO: Voluntarios solo pueden ver el mes actual en estadísticas
@@ -1261,20 +1361,20 @@ window.cambiarCriterioRanking = function(criterio) {
 }
 
 window.cargarRankingPersonal = function() {
-    const exp = localStorage.getItem("sigo_oficial_exp");
-    const esOficial = exp && Date.now() < parseInt(exp);
+    const esOficial = tienePermiso("personal");
+    const verHistorico = tienePermiso("historico");
     
     const tituloSeccion = document.querySelector("#personal .title-header");
     if(tituloSeccion) {
-        tituloSeccion.innerText = esOficial ? "Ficha Personal" : "Nómina de Personal (Mes Actual)";
+        tituloSeccion.innerText = verHistorico ? "Ficha Personal" : "Ficha Personal (Mes Actual)";
     }
 
     const bomberos = [...(MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial)];
     let emergencias = MEMORIA_REPORTES.filter(r => !r.esActividadInterna);
     let internas = MEMORIA_REPORTES.filter(r => r.esActividadInterna);
 
-    // BLOQUEO: Voluntarios solo pueden rankear y ver listas filtradas al mes actual
-    if (!esOficial) {
+    // BLOQUEO: sin permiso de histórico, solo se muestra el mes actual
+    if (!verHistorico) {
         const ahora = new Date();
         const mesActualStr = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,'0')}`;
         
@@ -1355,8 +1455,7 @@ let bomberoFichaActual = null;
 
 window.abrirFichaPersonal = function(nombre) {
     bomberoFichaActual = nombre;
-    const exp = localStorage.getItem("sigo_oficial_exp");
-    const esOficial = exp && Date.now() < parseInt(exp);
+    const esOficial = tienePermiso("historico");
     const sel = document.getElementById("filtro-mes-ficha");
     
     // BLOQUEO: Ficha de personal forzada al mes actual para voluntarios
@@ -1448,8 +1547,7 @@ function renderizarFichaPersonal(nombre, periodo) {
     const totalLlamadosUnificados = totalEmergenciasPuntaje + totalEsp;
     const porcentajeGlobal = totalLlamadosUnificados > 0 ? ((totalAsistenciasUnificadas + licsI) / totalLlamadosUnificados * 100).toFixed(1) : 100;
 
-    const exp = localStorage.getItem("sigo_oficial_exp");
-    const esOficial = exp && Date.now() < parseInt(exp);
+    const esOficial = tienePermiso("personal");
 
     let htmlFaltasDetalle = "";
     let htmlFaltasGlobal = "";
@@ -1546,7 +1644,7 @@ function renderizarFichaPersonal(nombre, periodo) {
                 </div>
             </div>
             
-            <div class="req-oficial" style="margin-top: 20px; text-align: center;">
+            <div class="req-perm-editar_epp" style="margin-top: 20px; text-align: center;">
                 <button class="btn-secundary" style="width: 100%; color: var(--dorado); border-color: var(--dorado);" onclick="abrirEdicionEPP('${b.nombre}')"><i class="fa-solid fa-pen-to-square"></i> Asignar / Editar EPP</button>
             </div>
             
@@ -1616,8 +1714,7 @@ window.abrirDetalleMaquina = async function(id) {
     selEst.innerHTML = `<option value="Operativo">Operativo</option><option value="Mantenimiento">Mantenimiento</option><option value="Fuera de Servicio">Fuera de Servicio</option>`;
     selEst.value = m.estado;
     
-    const exp = localStorage.getItem("sigo_oficial_exp");
-    const esOficial = exp && Date.now() < parseInt(exp);
+    const esOficial = tienePermiso("editar_material");
     selEst.disabled = !esOficial;
 
     const blueprintContenedor = document.querySelector('.truck-blueprint');
@@ -1701,8 +1798,7 @@ window.seleccionarGaveta = function(gaveta) {
     
     document.getElementById("lbl-gaveta-actual").innerText = gaveta;
 
-    const exp = localStorage.getItem("sigo_oficial_exp");
-    const esOficial = exp && Date.now() < parseInt(exp);
+    const esOficial = tienePermiso("editar_material");
     renderizarItemsMaquina(maquinaEditandoId, esOficial);
 }
 
@@ -1722,11 +1818,13 @@ function renderizarItemsMaquina(id, esOficial) {
 }
 
 window.actualizarEstadoMaquina = async function() {
+    if (!tienePermiso("editar_material")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const nuevoEst = document.getElementById("sel-estado-maquina").value;
     await updateDoc(doc(dbCloud, "maquinas", maquinaEditandoId), {estado: nuevoEst});
 }
 
 window.agregarItemInventario = async function() {
+    if (!tienePermiso("editar_material")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const nom = document.getElementById("nuevo-item-nombre").value;
     const cant = parseInt(document.getElementById("nuevo-item-cant").value) || 1;
     if(!nom) { alert("Ingresa el nombre de la herramienta."); return; }
@@ -1748,6 +1846,7 @@ window.agregarItemInventario = async function() {
 }
 
 window.eliminarItem = async function(idItem) {
+    if (!tienePermiso("editar_material")) { alert("🔒 No tienes permiso para esta acción."); return; }
     if(confirm("¿Seguro que deseas eliminar esta herramienta del inventario?")) {
         await deleteDoc(doc(dbCloud, "inventario", idItem));
     }
@@ -1767,6 +1866,10 @@ window.abrirPerfilHerramienta = function(idItem) {
     document.getElementById("perfil-herr-input-codigo").value = item.codigo || "";
     document.getElementById("perfil-herr-input-fecha").value = item.fechaPuestaServicio || "";
     document.getElementById("perfil-herr-input-estado").value = item.estado || "Operativo";
+
+    const puedeEditarHerr = tienePermiso("editar_material");
+    ["perfil-herr-input-nombre","perfil-herr-input-cantteo","perfil-herr-input-cantact","perfil-herr-input-codigo","perfil-herr-input-fecha","perfil-herr-input-estado"]
+        .forEach(idCampo => document.getElementById(idCampo).disabled = !puedeEditarHerr);
 
     const resumen = document.getElementById("perfil-herr-resumen");
     const estadoItem = item.estado || "Operativo";
@@ -1802,6 +1905,7 @@ function renderizarBitacoraHerramienta(bitacora) {
 }
 
 window.guardarPerfilHerramienta = async function() {
+    if (!tienePermiso("editar_material")) { alert("🔒 No tienes permiso para esta acción."); return; }
     if (!itemPerfilActualId) return;
     const nombre = document.getElementById("perfil-herr-input-nombre").value.trim();
     if (!nombre) { alert("El nombre no puede quedar vacío."); return; }
@@ -1818,6 +1922,7 @@ window.guardarPerfilHerramienta = async function() {
 }
 
 window.agregarBitacoraHerramienta = async function() {
+    if (!tienePermiso("editar_material")) { alert("🔒 No tienes permiso para esta acción."); return; }
     if (!itemPerfilActualId) return;
     const texto = document.getElementById("perfil-herr-nueva-texto").value.trim();
     const tipo = document.getElementById("perfil-herr-nueva-tipo").value;
@@ -1832,6 +1937,7 @@ window.agregarBitacoraHerramienta = async function() {
 }
 
 window.eliminarItemDesdePerfil = async function() {
+    if (!tienePermiso("editar_material")) { alert("🔒 No tienes permiso para esta acción."); return; }
     if (!itemPerfilActualId) return;
     if (confirm("¿Seguro que deseas eliminar esta herramienta del inventario? Se perderá también su bitácora.")) {
         await deleteDoc(doc(dbCloud, "inventario", itemPerfilActualId));
@@ -1843,6 +1949,7 @@ window.eliminarItemDesdePerfil = async function() {
 // 12. EXPORTACIÓN Y MATRIZ DE ASISTENCIA (ACTUALIZACIÓN 7.0)
 // ==========================================
 window.exportarCSV = function() {
+    if (!tienePermiso("exportar")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const dIni = document.getElementById("export-desde").value;
     const dFin = document.getElementById("export-hasta").value;
     if(!dIni || !dFin) { alert("Selecciona el rango de fechas para generar la matriz."); return; }
@@ -1916,6 +2023,7 @@ window.exportarCSV = function() {
 }
 
 window.exportarEquipoPersonal = function() {
+    if (!tienePermiso("exportar")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const bomberos = MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial;
 
     if (bomberos.length === 0) { alert("No hay personal registrado para exportar."); return; }
@@ -1949,6 +2057,7 @@ window.exportarEquipoPersonal = function() {
 }
 
 window.exportarInventarioUnidades = function() {
+    if (!tienePermiso("exportar")) { alert("🔒 No tienes permiso para esta acción."); return; }
     if (MEMORIA_MAQUINAS.length === 0) { alert("No hay unidades registradas para exportar."); return; }
 
     const encabezado = ["Unidad", "Ubicación/Gaveta", "Herramienta", "Cantidad Teórica", "Cantidad Actual", "Estado Ítem"];
@@ -2014,6 +2123,7 @@ mainContent.addEventListener('scroll', () => {
 let bomberoEditandoEPP = null;
 
 window.abrirEdicionEPP = function(nombre) {
+    if (!tienePermiso("editar_epp")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const b = MEMORIA_BOMBEROS.find(bombero => bombero.nombre === nombre);
     if (!b || !b.id) {
         alert("Sincronizando con la nube... Cierra la ficha e intenta de nuevo en unos segundos.");
@@ -2039,6 +2149,7 @@ window.abrirEdicionEPP = function(nombre) {
 }
 
 window.guardarEdicionEPP = async function() {
+    if (!tienePermiso("editar_epp")) { alert("🔒 No tienes permiso para esta acción."); return; }
     if (!bomberoEditandoEPP) return;
 
     const datosEPP = {
@@ -2221,6 +2332,7 @@ window.cargarListaLicencias = function() {
 }
 
 window.rechazarLicencia = async function(id) {
+    if (!tienePermiso("licencias")) { alert("🔒 No tienes permiso para esta acción."); return; }
     if(confirm("¿Estás seguro de RECHAZAR esta licencia? No se aplicará automáticamente en las asistencias de esta persona.")) {
         try {
             await updateDoc(doc(dbCloud, "licencias", id), { estado: "Rechazada" });
@@ -2232,6 +2344,7 @@ window.rechazarLicencia = async function(id) {
 }
 
 window.borrarLicencia = async function(id) {
+    if (!tienePermiso("licencias")) { alert("🔒 No tienes permiso para esta acción."); return; }
     if(confirm("¿Estás seguro de ELIMINAR permanentemente esta licencia del historial?")) {
         try {
             await deleteDoc(doc(dbCloud, "licencias", id));
@@ -2239,5 +2352,144 @@ window.borrarLicencia = async function(id) {
         } catch (e) {
             alert("Error de red al intentar borrar.");
         }
+    }
+}
+
+// ==========================================
+// GESTIÓN DE OFICIALES (PERFILES, PIN Y PERMISOS)
+// ==========================================
+let oficialEditandoId = null;
+
+window.cargarListaOficiales = function() {
+    const cont = document.getElementById("lista-oficiales");
+    if (!cont) return;
+    if (!tienePermiso("gestionar_oficiales")) { cont.innerHTML = ""; return; }
+
+    if (MEMORIA_OFICIALES.length === 0) {
+        cont.innerHTML = `<p style="color: var(--texto-gris); text-align: center; margin-top: 20px;"><i class="fa-solid fa-user-shield"></i> Aún no hay oficiales creados. Usa el botón de arriba para agregar el primero.</p>`;
+        return;
+    }
+
+    cont.innerHTML = MEMORIA_OFICIALES.map(o => {
+        const permisos = o.permisos || [];
+        const activo = o.activo !== false;
+        const chips = permisos.length === 0
+            ? `<span style="color: var(--texto-gris); font-size: 0.8rem;">Sin permisos asignados</span>`
+            : CATALOGO_PERMISOS.filter(p => permisos.includes(p.key)).map(p => `<span class="badge" style="font-size: 0.7rem;">${p.label}</span>`).join("");
+        return `
+        <div class="glass-panel" onclick="abrirEditorOficial('${o.id}')" style="cursor: pointer; padding: 15px; border-radius: 12px; margin-bottom: 12px; border-left: 3px solid ${activo ? 'var(--dorado)' : 'var(--rojo-emergencia)'}; ${activo ? '' : 'opacity: 0.55;'}">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                <div>
+                    <div style="color: white; font-weight: bold;">${o.nombre}</div>
+                    <div style="color: var(--dorado); font-size: 0.85rem; margin-top: 2px;">${o.cargo}${activo ? '' : ' · <span style="color: var(--rojo-emergencia);">Desactivado</span>'}</div>
+                </div>
+                <i class="fa-solid fa-chevron-right" style="color: var(--texto-gris);"></i>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">${chips}</div>
+        </div>`;
+    }).join("");
+}
+
+function renderizarCheckboxPermisos(seleccionados) {
+    const grupos = [...new Set(CATALOGO_PERMISOS.map(p => p.grupo))];
+    document.getElementById("oficial-permisos").innerHTML = grupos.map(g => `
+        <h4 style="color: var(--dorado); margin: 18px 0 8px; font-size: 0.9rem;">${g}</h4>
+        ${CATALOGO_PERMISOS.filter(p => p.grupo === g).map(p => `
+            <label class="checkbox-item" style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px;">
+                <input type="checkbox" class="chk-permiso-oficial" value="${p.key}" ${seleccionados.includes(p.key) ? 'checked' : ''} style="margin-top: 3px;">
+                <span><span style="color: white;">${p.label}</span>${p.desc ? `<br><span style="color: var(--texto-gris); font-size: 0.78rem;">${p.desc}</span>` : ''}</span>
+            </label>`).join("")}
+    `).join("");
+}
+
+window.abrirEditorOficial = function(idOficial) {
+    if (!tienePermiso("gestionar_oficiales")) { alert("🔒 No tienes permiso para esta acción."); return; }
+    oficialEditandoId = idOficial || null;
+    const o = idOficial ? MEMORIA_OFICIALES.find(x => x.id === idOficial) : null;
+
+    const bomberos = MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial;
+    const sel = document.getElementById("oficial-nombre");
+    sel.innerHTML = `<option value="">-- Selecciona un voluntario --</option>` + bomberos.map(b => `<option value="${b.nombre}" data-cargo="${b.cargo}">${b.nombre} (${b.cargo})</option>`).join("");
+    sel.value = o ? o.nombre : "";
+    sel.disabled = !!o;
+
+    document.getElementById("oficial-titulo").innerText = o ? "Editar Oficial" : "Nuevo Oficial";
+    document.getElementById("oficial-cargo").value = o ? o.cargo : "";
+    document.getElementById("oficial-pin").value = o ? o.pin : "";
+    document.getElementById("oficial-activo").checked = o ? o.activo !== false : true;
+    document.getElementById("contenedor-oficial-activo").style.display = o ? "block" : "none";
+    document.getElementById("btn-eliminar-oficial").style.display = o ? "block" : "none";
+
+    renderizarCheckboxPermisos(o ? (o.permisos || []) : []);
+    abrirModal("modal-oficial");
+}
+
+window.alElegirVoluntarioOficial = function() {
+    const sel = document.getElementById("oficial-nombre");
+    const opt = sel.options[sel.selectedIndex];
+    const cargo = opt ? (opt.getAttribute("data-cargo") || "") : "";
+    document.getElementById("oficial-cargo").value = cargo;
+    // Sugerencia: los Ayudantes parten con todos los permisos
+    if (cargo.startsWith("Ayudante")) renderizarCheckboxPermisos(CATALOGO_PERMISOS.map(p => p.key));
+}
+
+window.marcarTodosPermisosOficial = function(valor) {
+    document.querySelectorAll(".chk-permiso-oficial").forEach(c => c.checked = valor);
+}
+
+window.generarPinOficial = function() {
+    let pin;
+    do { pin = String(Math.floor(10000 + Math.random() * 90000)); }
+    while (MEMORIA_OFICIALES.some(o => o.pin === pin));
+    document.getElementById("oficial-pin").value = pin;
+}
+
+window.guardarOficial = async function() {
+    if (!tienePermiso("gestionar_oficiales")) { alert("🔒 No tienes permiso para esta acción."); return; }
+    const nombre = document.getElementById("oficial-nombre").value;
+    const cargo = document.getElementById("oficial-cargo").value.trim();
+    const pin = document.getElementById("oficial-pin").value.trim();
+    const activo = document.getElementById("oficial-activo").checked;
+    const permisos = Array.from(document.querySelectorAll(".chk-permiso-oficial:checked")).map(c => c.value);
+
+    if (!nombre) { alert("Selecciona el voluntario."); return; }
+    if (!cargo) { alert("Indica el cargo."); return; }
+    if (!/^\d{5}$/.test(pin)) { alert("El PIN debe tener exactamente 5 números."); return; }
+    if (MEMORIA_OFICIALES.some(o => o.pin === pin && o.id !== oficialEditandoId)) { alert("Ese PIN ya lo usa otro oficial. Elige uno distinto."); return; }
+    if (!oficialEditandoId && MEMORIA_OFICIALES.some(o => o.nombre === nombre)) { alert("Este voluntario ya tiene un perfil de oficial. Ábrelo desde la lista para editarlo."); return; }
+
+    try {
+        const cfg = await getDoc(doc(dbCloud, "configuracion", "admin"));
+        if (cfg.exists() && cfg.data().pin === pin) { alert("Ese PIN coincide con el PIN maestro de Ayudante. Elige otro."); return; }
+
+        // Evitar que un oficial se quite a sí mismo la gestión de oficiales por accidente
+        const sesion = obtenerSesion();
+        if (sesion && !sesion.esMaestro && sesion.id === oficialEditandoId && !permisos.includes("gestionar_oficiales")) {
+            if (!confirm("Te estás quitando el permiso de Gestión de Oficiales a ti mismo. ¿Continuar?")) return;
+        }
+
+        const datos = { nombre, cargo, pin, permisos, activo };
+        if (oficialEditandoId) {
+            await updateDoc(doc(dbCloud, "oficiales", oficialEditandoId), datos);
+        } else {
+            await addDoc(collection(dbCloud, "oficiales"), { ...datos, creado: Date.now() });
+        }
+        cerrarModal("modal-oficial");
+        alert(`✅ Oficial guardado. PIN de acceso: ${pin}`);
+    } catch(e) {
+        alert("Error al guardar. Revisa tu conexión.");
+        console.error(e);
+    }
+}
+
+window.eliminarOficial = async function() {
+    if (!tienePermiso("gestionar_oficiales") || !oficialEditandoId) return;
+    const o = MEMORIA_OFICIALES.find(x => x.id === oficialEditandoId);
+    if (!confirm(`¿Eliminar el perfil de oficial de ${o ? o.nombre : "este oficial"}? Su PIN dejará de funcionar de inmediato.`)) return;
+    try {
+        await deleteDoc(doc(dbCloud, "oficiales", oficialEditandoId));
+        cerrarModal("modal-oficial");
+    } catch(e) {
+        alert("Error al eliminar. Revisa tu conexión.");
     }
 }

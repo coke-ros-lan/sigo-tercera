@@ -3,9 +3,13 @@
   "short_name": "SIGO 3ra",
   "description": "Sistema Integrado de Gestión Operativa",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
   "background_color": "#051024",
-  "theme_color": "#0d2659",
+  "theme_color": "#051024",
   "icons": [
     {
       "src": "LogoTercera.png",
