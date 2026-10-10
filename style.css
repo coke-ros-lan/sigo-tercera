@@ -759,3 +759,84 @@ html.tema-grafito .stepper-cantidad button { background: var(--g-superficie-2); 
 html.tema-claro .form-agregar-material { background: var(--c-suave); border-color: var(--c-borde-fuerte); }
 html.tema-claro .stepper-cantidad button { background: var(--c-superficie); border-color: var(--c-borde-fuerte); color: var(--c-azul); }
 html.tema-claro .agregar-material-btn #lbl-agregar-gaveta { color: var(--c-azul); }
+
+/* ========================================== */
+/* 18. TEMPORADA DE EMERGENCIAS (12 MESES)    */
+/* ========================================== */
+.panel-temporada {
+    margin-top: 20px; padding: 20px; border-radius: 24px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01));
+    border: 1px solid rgba(255, 255, 255, 0.05); border-top: 1px solid rgba(255,255,255,0.15);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+.temporada-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.temporada-sub { color: var(--texto-gris); font-size: 0.85rem; margin-top: 4px; }
+.temporada-vacio { color: var(--texto-gris); font-size: 0.9rem; text-align: center; padding: 14px 0; }
+
+.t-grilla { display: grid; grid-template-columns: 44px repeat(12, minmax(0, 1fr)) 34px; gap: 3px; align-items: center; }
+.t-mes { font-size: 0.68rem; font-weight: 700; color: var(--texto-gris); text-align: center; line-height: 1.1; }
+.t-mes em { display: block; font-style: normal; font-size: 0.6rem; color: var(--dorado); }
+.t-etiqueta { font-size: 0.75rem; font-weight: 700; color: var(--texto-blanco); white-space: nowrap; }
+.t-etiqueta-total { color: var(--dorado); }
+.t-suma { font-size: 0.75rem; font-weight: 700; color: var(--texto-gris); text-align: right; }
+.t-suma-total { color: var(--texto-blanco); }
+.t-celda {
+    aspect-ratio: 1; min-height: 20px; border: none; border-radius: 5px; cursor: pointer; padding: 0;
+    background: rgba(127, 127, 127, 0.12); color: var(--texto-blanco);
+    font-size: 0.62rem; font-weight: 700; transition: transform 0.15s, box-shadow 0.15s;
+}
+.t-celda.fuerte { color: #ffffff; }
+.t-celda:hover { transform: scale(1.12); box-shadow: 0 0 0 2px var(--dorado); }
+.t-celda.t-total { aspect-ratio: auto; height: 34px; font-size: 0.75rem; margin-bottom: 8px; }
+.t-etiqueta-total, .t-suma-total { margin-bottom: 8px; }
+.t-celda.pico { box-shadow: 0 0 0 2px var(--dorado); }
+.t-celda.inicio-anio { margin-left: 3px; }
+
+.t-leyenda { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 14px; font-size: 0.72rem; color: var(--texto-gris); }
+.t-leyenda > i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+.t-pico-texto { margin-left: auto; color: var(--texto-blanco); }
+.t-pico-texto i { color: var(--dorado); }
+
+.temporada-detalle:not(:empty) { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); }
+.t-detalle-cabecera { display: flex; justify-content: space-between; align-items: center; font-weight: 700; color: var(--texto-blanco); margin-bottom: 10px; }
+.t-detalle-item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,0.2); margin-bottom: 6px; cursor: pointer; }
+.t-detalle-clave { font-weight: 800; color: #ff6b6b; font-size: 0.85rem; }
+.t-detalle-texto { color: var(--texto-blanco); font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-detalle-fecha { color: var(--texto-gris); font-size: 0.75rem; white-space: nowrap; }
+
+@media (max-width: 480px) {
+    .panel-temporada { padding: 16px 12px; }
+    .t-grilla { grid-template-columns: 36px repeat(12, minmax(0, 1fr)) 26px; gap: 2px; }
+    .t-celda { font-size: 0.55rem; border-radius: 4px; min-height: 18px; }
+    .t-mes { font-size: 0.58rem; }
+    .t-pico-texto { margin-left: 0; width: 100%; margin-top: 6px; }
+}
+@media (max-width: 768px) {
+    .panel-temporada { background: rgba(13, 38, 89, 0.6); }
+}
+
+html.tema-grafito .panel-temporada { background: var(--g-superficie); border: 1px solid var(--g-borde); box-shadow: var(--g-sombra); }
+html.tema-grafito .t-detalle-item { background: var(--g-superficie-2); }
+html.tema-grafito .temporada-detalle:not(:empty) { border-top-color: var(--g-borde); }
+html.tema-claro .panel-temporada { background: var(--c-superficie); border: 1px solid var(--c-borde); box-shadow: var(--c-sombra); }
+html.tema-claro .t-celda { background: #eef1f6; }
+html.tema-claro .t-celda.t-total, html.tema-claro .t-celda { color: var(--texto-blanco); }
+html.tema-claro .t-celda.fuerte { color: #ffffff; }
+html.tema-claro .t-celda:hover, html.tema-claro .t-celda.pico { box-shadow: 0 0 0 2px var(--c-azul); }
+html.tema-claro .t-mes em, html.tema-claro .t-etiqueta-total, html.tema-claro .t-pico-texto i { color: var(--c-azul); }
+html.tema-claro .t-detalle-item { background: var(--c-suave); }
+html.tema-claro .t-detalle-clave { color: #b42318; }
+html.tema-claro .temporada-detalle:not(:empty) { border-top-color: var(--c-borde); }
+@media (max-width: 768px) {
+    html.tema-grafito .panel-temporada { background: var(--g-superficie); }
+    html.tema-claro .panel-temporada { background: var(--c-superficie); }
+}
+
+/* Enlace directo de licencias (?licencia=1): sin banner de emergencias */
+body.modo-solo-licencia #banner-emergencia { display: none !important; }
+/* Pestaña Solicitar Licencia: que los campos lado a lado no se salgan en pantallas angostas */
+#solicitar-licencia .form-group > div { min-width: 0; }
+#solicitar-licencia input[type="date"] { min-width: 0; width: 100%; }
+@media (max-width: 420px) {
+    #solicitar-licencia input[type="date"] { padding-left: 10px; padding-right: 8px; font-size: 0.95rem; }
+}

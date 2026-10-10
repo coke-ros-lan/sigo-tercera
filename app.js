@@ -368,21 +368,18 @@ iniciarSistema();
 let yaAbrioLicenciaDirecta = false;
 function abrirModalLicenciaDirecto() {
     if (yaAbrioLicenciaDirecta) return;
-    if (MEMORIA_BOMBEROS.length === 0 && DatosClaves.nominaOficial.length === 0) return;
     yaAbrioLicenciaDirecta = true;
 
+    // Modo solo licencia: sin menú, sin banner de emergencias y sin gestos
+    document.body.classList.add("modo-solo-licencia");
     const menuBtn = document.getElementById("menu-toggle");
     if (menuBtn) menuBtn.style.display = "none";
     const sidebar = document.getElementById("sidebar");
     if (sidebar) sidebar.style.display = "none";
 
-    const hero = document.querySelector("#inicio .hero");
-    if (hero) hero.style.display = "none";
-
-    abrirModalLicencia();
-
-    const cerrarX = document.querySelector("#modal-licencia .close-btn");
-    if (cerrarX) cerrarX.style.display = "none";
+    document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+    document.getElementById("solicitar-licencia").classList.add("active");
+    prepararFormLicencia();
 }
 
 async function inicializarDatosEnNube() {
@@ -430,6 +427,7 @@ function conectarRadioEnTiempoReal() {
             return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
         });
         if(document.getElementById('personal').classList.contains('active')) cargarRankingPersonal();
+        if(document.getElementById('solicitar-licencia').classList.contains('active')) prepararFormLicencia();
     });
 
     onSnapshot(collection(dbCloud, "inventario"), (snapshot) => {
@@ -500,7 +498,37 @@ window.switchView = function(viewId, element) {
     if (viewId === 'inventario') cargarInventarioCarros();
     if (viewId === 'licencias-vista') cargarListaLicencias();
     if (viewId === 'oficiales-vista') cargarListaOficiales();
+    if (viewId === 'solicitar-licencia') prepararFormLicencia();
 }
+
+// Gestos táctiles: deslizar a la derecha abre el menú, a la izquierda lo cierra
+;(function activarGestosMenu() {
+    let x0 = null, y0 = null, t0 = 0, permitido = false;
+    const zonaExcluida = (el) => el && el.closest && el.closest(".map-container, .map-container-small, .leaflet-container, input, select, textarea, .t-grilla, .keypad");
+    const hayVentanaAbierta = () =>
+        [...document.querySelectorAll(".modal")].some(m => m.style.display === "block") ||
+        document.getElementById("admin-pin-pad").classList.contains("active");
+
+    document.addEventListener("touchstart", (e) => {
+        if (e.touches.length !== 1) { x0 = null; return; }
+        x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+        permitido = !zonaExcluida(e.target);
+    }, { passive: true });
+
+    document.addEventListener("touchend", (e) => {
+        if (x0 === null || !permitido) return;
+        const dx = e.changedTouches[0].clientX - x0;
+        const dy = e.changedTouches[0].clientY - y0;
+        const rapido = Date.now() - t0 < 700;
+        x0 = null;
+        // Debe ser un deslizamiento claro y mayormente horizontal (para no confundirlo con hacer scroll)
+        if (!rapido || Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+        if (document.body.classList.contains("modo-solo-licencia") || hayVentanaAbierta()) return;
+
+        const abierto = document.getElementById("sidebar").classList.contains("open");
+        if ((dx > 0 && !abierto) || (dx < 0 && abierto)) toggleMenu();
+    }, { passive: true });
+})();
 
 // ==========================================
 // 5. ASISTENTE: NUEVO SERVICIO Y AUTOREGISTRO
@@ -1398,6 +1426,121 @@ window.actualizarDashboard = function() {
     const colorGrillaGrafico = estilosTema.getPropertyValue('--grilla-grafico').trim() || 'rgba(255,255,255,0.1)';
     const ctx = document.getElementById('grafico-emergencias').getContext('2d');
     graficoEmergenciasInstancia = new Chart(ctx, { type: 'bar', data: { labels: labelsGrafico, datasets: [{ label: 'Cantidad', data: dataGrafico, backgroundColor: '#ff4d4d', borderRadius: 5 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: colorTextoGrafico, stepSize: 1 }, grid: { color: colorGrillaGrafico } }, x: { ticks: { color: colorTextoGrafico }, grid: { display: false } } } } });
+
+    renderizarTemporada();
+}
+
+// ==========================================
+// 9b. TEMPORADA DE EMERGENCIAS (BARRA DE 12 MESES POR CLAVE)
+// ==========================================
+const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const MESES_LARGOS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+let temporadaColumnas = [];
+let temporadaEmergencias = [];
+
+const claveDeReporte = (r) => ((r.claveFinal || r.actividad || "").split(" ")[0] || "Sin clave");
+// Ordena 10-0, 10-1 ... 10-17 por número, no alfabéticamente
+const ordenClave = (a, b) => {
+    const na = a.split("-").map(Number), nb = b.split("-").map(Number);
+    return (na[0] - nb[0]) || ((na[1] ?? 0) - (nb[1] ?? 0)) || a.localeCompare(b);
+};
+
+window.renderizarTemporada = function() {
+    const cont = document.getElementById("temporada-contenido");
+    const sel = document.getElementById("filtro-temporada");
+    if (!cont || !sel) return;
+    document.getElementById("temporada-detalle").innerHTML = "";
+
+    if (!tienePermiso("historico")) {
+        sel.style.display = "none";
+        cont.innerHTML = `<p class="temporada-vacio"><i class="fa-solid fa-lock"></i> Para ver la temporada se necesita el permiso "Ver meses anteriores".</p>`;
+        return;
+    }
+    sel.style.display = "";
+
+    const emergencias = MEMORIA_REPORTES.filter(r => !r.esActividadInterna && r.fecha);
+    const anios = [...new Set(emergencias.map(r => new Date(r.fecha).getFullYear()))].sort((a, b) => b - a);
+    const opciones = [["ultimos12", "Últimos 12 meses"], ...anios.map(a => [String(a), `Año ${a}`]), ["historico", "Histórico (todos los años)"]];
+    const valorPrevio = sel.value || "ultimos12";
+    sel.innerHTML = opciones.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+    sel.value = opciones.some(([v]) => v === valorPrevio) ? valorPrevio : "ultimos12";
+    const modo = sel.value;
+
+    // Columnas: 12 meses. Cada columna sabe qué emergencias le corresponden.
+    const ahora = new Date();
+    if (modo === "ultimos12") {
+        temporadaColumnas = Array.from({ length: 12 }, (_, i) => {
+            const d = new Date(ahora.getFullYear(), ahora.getMonth() - 11 + i, 1);
+            return { etiqueta: MESES_CORTOS[d.getMonth()], titulo: `${MESES_LARGOS[d.getMonth()]} ${d.getFullYear()}`, anio: d.getFullYear(), mes: d.getMonth(), primeroDelAnio: i === 0 || d.getMonth() === 0 };
+        });
+    } else {
+        const anio = modo === "historico" ? null : parseInt(modo);
+        temporadaColumnas = MESES_CORTOS.map((m, i) => ({ etiqueta: m, titulo: anio ? `${MESES_LARGOS[i]} ${anio}` : `${MESES_LARGOS[i]} (todos los años)`, anio, mes: i }));
+    }
+    const enColumna = (r, c) => { const d = new Date(r.fecha); return d.getMonth() === c.mes && (c.anio === null || d.getFullYear() === c.anio); };
+    temporadaEmergencias = emergencias.filter(r => temporadaColumnas.some(c => enColumna(r, c)));
+
+    document.getElementById("temporada-sub").innerText = modo === "historico"
+        ? `Suma de todos los años registrados (${anios.length ? anios[anios.length - 1] + "–" + anios[0] : "sin datos"}) para ver la temporada típica`
+        : "Cantidad de servicios por mes y por clave";
+
+    if (temporadaEmergencias.length === 0) {
+        cont.innerHTML = `<p class="temporada-vacio"><i class="fa-solid fa-calendar-xmark"></i> No hay emergencias registradas en este periodo.</p>`;
+        return;
+    }
+
+    const contar = (filtro) => temporadaColumnas.map(c => temporadaEmergencias.filter(r => enColumna(r, c) && filtro(r)).length);
+    const totales = contar(() => true);
+    const claves = [...new Set(temporadaEmergencias.map(claveDeReporte))].sort(ordenClave);
+    const filas = claves.map(clave => ({ clave, valores: contar(r => claveDeReporte(r) === clave) }));
+    const maxTotal = Math.max(...totales);
+    const minTotal = Math.min(...totales.filter(n => n > 0));
+    const maxCelda = Math.max(...filas.flatMap(f => f.valores));
+
+    // Intensidad con raíz cuadrada para que los meses con pocos casos igual se noten
+    const celda = (n, max, clave, iCol, grande) => {
+        // Fila "Todas": se compara contra el mes más tranquilo para que resalten los puntos críticos
+        const nivel = n === 0 ? 0 : grande
+            ? 0.18 + 0.82 * (maxTotal === minTotal ? 1 : (n - minTotal) / (maxTotal - minTotal))
+            : 0.18 + 0.82 * Math.sqrt(n / max);
+        const fondo = n === 0 ? "" : `background: rgba(255, 77, 77, ${nivel.toFixed(2)});`;
+        const claseTexto = nivel > 0.55 ? " fuerte" : "";
+        const pico = grande && n > 0 && n === maxTotal ? " pico" : "";
+        const inicioAnio = temporadaColumnas[iCol].primeroDelAnio && iCol > 0 ? " inicio-anio" : "";
+        return `<button class="t-celda${grande ? " t-total" : ""}${claseTexto}${pico}${inicioAnio}" style="${fondo}" title="${temporadaColumnas[iCol].titulo}${clave ? " · " + clave : ""}: ${n}" onclick="verDetalleTemporada(${iCol}, ${clave ? `'${clave}'` : "null"})">${n || ""}</button>`;
+    };
+
+    const cabeceraMeses = temporadaColumnas.map((c, i) => `<span class="t-mes${c.primeroDelAnio && modo === "ultimos12" ? " con-anio" : ""}">${c.etiqueta}${c.primeroDelAnio && modo === "ultimos12" ? `<em>${String(c.anio).slice(2)}</em>` : ""}</span>`).join("");
+    const picoMes = temporadaColumnas[totales.indexOf(maxTotal)];
+
+    cont.innerHTML = `
+        <div class="t-grilla">
+            <span class="t-etiqueta"></span>${cabeceraMeses}<span class="t-suma">Total</span>
+            <span class="t-etiqueta t-etiqueta-total">Todas</span>${totales.map((n, i) => celda(n, maxTotal, null, i, true)).join("")}<span class="t-suma t-suma-total">${temporadaEmergencias.length}</span>
+            ${filas.map(f => `<span class="t-etiqueta">${f.clave}</span>${f.valores.map((n, i) => celda(n, maxCelda, f.clave, i, false)).join("")}<span class="t-suma">${f.valores.reduce((a, b) => a + b, 0)}</span>`).join("")}
+        </div>
+        <div class="t-leyenda">
+            <span>Menos</span><i style="background: rgba(255,77,77,0.18)"></i><i style="background: rgba(255,77,77,0.45)"></i><i style="background: rgba(255,77,77,0.72)"></i><i style="background: rgba(255,77,77,1)"></i><span>Más</span>
+            <span class="t-pico-texto"><i class="fa-solid fa-triangle-exclamation"></i> Mes más crítico: <b>${picoMes.titulo}</b> (${maxTotal})</span>
+        </div>`;
+}
+
+window.verDetalleTemporada = function(iCol, clave) {
+    const c = temporadaColumnas[iCol];
+    const lista = temporadaEmergencias
+        .filter(r => { const d = new Date(r.fecha); return d.getMonth() === c.mes && (c.anio === null || d.getFullYear() === c.anio) && (!clave || claveDeReporte(r) === clave); })
+        .sort((a, b) => b.fecha - a.fecha);
+    const det = document.getElementById("temporada-detalle");
+    const titulo = `${c.titulo}${clave ? " · " + clave : ""} · ${lista.length} ${lista.length === 1 ? "servicio" : "servicios"}`;
+    det.innerHTML = `
+        <div class="t-detalle-cabecera"><span>${titulo}</span><button class="btn-text" style="padding: 2px 6px;" onclick="document.getElementById('temporada-detalle').innerHTML=''" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+        ${lista.length === 0 ? `<p class="temporada-vacio">Sin servicios en esta celda.</p>` : lista.map(r => `
+            <div class="t-detalle-item" onclick="verDetalleReporte('${r.id}')">
+                <span class="t-detalle-clave">${claveDeReporte(r)}</span>
+                <span class="t-detalle-texto">${r.direccion || "Sin dirección"}</span>
+                <span class="t-detalle-fecha">${fechaCL(r.fecha)} ${horaCL(r.fecha)}</span>
+            </div>`).join("")}`;
+    det.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 // ==========================================
@@ -2338,26 +2481,28 @@ window.guardarEdicionEPP = async function() {
 // ==========================================
 // 15. SOLICITUD DE LICENCIAS ONLINE
 // ==========================================
-window.abrirModalLicencia = function() {
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('sidebar-overlay').classList.remove('open');
-
+// Carga la nómina en el formulario sin borrar lo que el voluntario ya haya escrito
+function prepararFormLicencia() {
     const bomberos = MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial;
     const sel = document.getElementById("licencia-nombre");
+    const elegido = sel.value;
     sel.innerHTML = `<option value="">-- Selecciona tu nombre --</option>` + bomberos.map(b => `<option value="${b.nombre}" data-cargo="${b.cargo}">${b.nombre}</option>`).join('');
-    
-    document.getElementById("licencia-rut").value = "";
-    document.getElementById("licencia-cargo").value = "";
-    document.getElementById("licencia-inicio").value = "";
-    document.getElementById("licencia-termino").value = "";
-    document.getElementById("licencia-motivo").value = "";
-    
+    sel.value = elegido;
     sel.onchange = function() {
         const option = sel.options[sel.selectedIndex];
         document.getElementById("licencia-cargo").value = option ? (option.getAttribute('data-cargo') || "") : "";
     };
-    
-    abrirModal("modal-licencia");
+}
+
+function limpiarFormLicencia() {
+    ["licencia-nombre", "licencia-rut", "licencia-cargo", "licencia-inicio", "licencia-termino", "licencia-motivo"]
+        .forEach(id => document.getElementById(id).value = "");
+}
+
+// Se mantiene por compatibilidad: abre la pestaña de licencia
+window.abrirModalLicencia = function() {
+    const item = document.querySelector('.nav-item[onclick*="solicitar-licencia"]');
+    switchView('solicitar-licencia', item);
 }
 
 window.formatearRUT = function(input) {
@@ -2407,7 +2552,7 @@ window.enviarLicencia = async function() {
             fechaSolicitud: Date.now()
         });
         alert("✅ Licencia enviada y registrada correctamente. Se aplicará automáticamente en las listas de asistencia internas.");
-        cerrarModal("modal-licencia");
+        limpiarFormLicencia();
     } catch(e) {
         alert("Error al enviar la licencia. Verifica tu conexión.");
     }

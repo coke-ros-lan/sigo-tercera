@@ -104,7 +104,7 @@
         </div>
         <ul class="nav-menu">
             <li class="nav-item active" onclick="switchView('inicio', this)"><i class="fa-solid fa-house"></i> Inicio</li>
-            <li class="nav-item" onclick="abrirModalLicencia()"><i class="fa-solid fa-file-medical"></i> Solicitar Licencia</li>
+            <li class="nav-item" onclick="switchView('solicitar-licencia', this)"><i class="fa-solid fa-file-medical"></i> Solicitar Licencia</li>
             <li class="nav-item" onclick="switchView('historial', this)"><i class="fa-solid fa-clock-rotate-left"></i> Historial Operativo</li>
             
             <li class="nav-item req-perm-licencias" onclick="switchView('licencias-vista', this)"><i class="fa-solid fa-bed"></i> Registro de Licencias</li>
@@ -149,6 +149,44 @@
             </div>
         </section>
 
+        <section id="solicitar-licencia" class="view-section">
+            <div class="header-section">
+                <h2 class="title-header">Solicitar Licencia</h2>
+                <p style="color: var(--texto-gris); margin-top: 5px;">Válido únicamente para Actividades Internas (Citaciones).</p>
+            </div>
+            <div class="form-glass glass-panel" style="padding: 20px; border-radius: 15px; max-width: 600px;">
+                <div class="form-group">
+                    <label>Nombre Completo</label>
+                    <select id="licencia-nombre" class="input-glass"></select>
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label>RUT</label>
+                        <input type="text" id="licencia-rut" class="input-glass" placeholder="12.345.678-9" oninput="formatearRUT(this)" maxlength="12">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Cargo</label>
+                        <input type="text" id="licencia-cargo" class="input-glass" readonly style="color: var(--dorado); background: rgba(0,0,0,0.5);">
+                    </div>
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label>Fecha de Inicio</label>
+                        <input type="date" id="licencia-inicio" class="input-glass">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Fecha de Término</label>
+                        <input type="date" id="licencia-termino" class="input-glass">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Motivo de la Licencia</label>
+                    <textarea id="licencia-motivo" class="input-glass" rows="3" placeholder="Indique el motivo (trabajo, salud, estudios, etc.)"></textarea>
+                </div>
+                <button class="btn-primary" style="width: 100%; margin-top: 5px;" onclick="enviarLicencia()"><i class="fa-solid fa-paper-plane"></i> Enviar Solicitud</button>
+            </div>
+        </section>
+
         <section id="historial" class="view-section">
             <div class="header-section">
                 <h2 class="title-header">Historial Operativo</h2>
@@ -185,6 +223,18 @@
             <div class="chart-container">
                 <h3 style="color: var(--dorado); margin-bottom: 15px;">Distribución de Emergencias</h3>
                 <canvas id="grafico-emergencias"></canvas>
+            </div>
+
+            <div class="panel-temporada" id="panel-temporada">
+                <div class="temporada-cabecera">
+                    <div>
+                        <h3 style="color: var(--dorado);">Temporada de Emergencias</h3>
+                        <p class="temporada-sub" id="temporada-sub">Cantidad de servicios por mes y por clave</p>
+                    </div>
+                    <select id="filtro-temporada" class="input-glass" onchange="renderizarTemporada()" style="width: auto;"></select>
+                </div>
+                <div id="temporada-contenido"></div>
+                <div id="temporada-detalle" class="temporada-detalle"></div>
             </div>
         </section>
 
@@ -311,49 +361,6 @@
                         <button class="btn-secundary" style="flex: 1;" onclick="volverPaso2()"><i class="fa-solid fa-arrow-left"></i> Volver</button>
                         <button class="btn-primary" style="flex: 2;" onclick="guardarReporteFinal()"><i class="fa-solid fa-floppy-disk"></i> Guardar Reporte</button>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="modal-licencia" class="modal">
-        <div class="modal-content glass-panel" style="max-width: 500px;">
-            <div class="modal-header">
-                <h2>Solicitud de Licencia</h2>
-                <span class="close-btn" onclick="cerrarModal('modal-licencia')"><i class="fa-solid fa-xmark"></i></span>
-            </div>
-            <div class="modal-body">
-                <p style="color: var(--texto-gris); font-size: 0.9rem; margin-bottom: 20px; text-align: center;">Válido únicamente para Actividades Internas (Citaciones).</p>
-                <div class="form-group">
-                    <label>Nombre Completo</label>
-                    <select id="licencia-nombre" class="input-glass"></select>
-                </div>
-                <div class="form-group" style="display: flex; gap: 10px;">
-                    <div style="flex: 1;">
-                        <label>RUT</label>
-                        <input type="text" id="licencia-rut" class="input-glass" placeholder="12.345.678-9" oninput="formatearRUT(this)" maxlength="12">
-                    </div>
-                    <div style="flex: 1;">
-                        <label>Cargo</label>
-                        <input type="text" id="licencia-cargo" class="input-glass" readonly style="color: var(--dorado); background: rgba(0,0,0,0.5);">
-                    </div>
-                </div>
-                <div class="form-group" style="display: flex; gap: 10px;">
-                    <div style="flex: 1;">
-                        <label>Fecha de Inicio</label>
-                        <input type="date" id="licencia-inicio" class="input-glass">
-                    </div>
-                    <div style="flex: 1;">
-                        <label>Fecha de Término</label>
-                        <input type="date" id="licencia-termino" class="input-glass">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Motivo de la Licencia</label>
-                    <textarea id="licencia-motivo" class="input-glass" rows="3" placeholder="Indique el motivo (trabajo, salud, estudios, etc.)"></textarea>
-                </div>
-                <div class="modal-footer-spacing">
-                    <button class="btn-primary" style="width: 100%; margin-top: 15px;" onclick="enviarLicencia()"><i class="fa-solid fa-paper-plane"></i> Enviar Solicitud</button>
                 </div>
             </div>
         </div>
