@@ -10,6 +10,8 @@
     --texto-blanco: #ffffff;
     --texto-gris: #b3b3b3;
     --apple-radius: 20px; 
+    --perfil-inactivo: rgba(255,255,255,0.4);
+    --grilla-grafico: rgba(255,255,255,0.1);
 }
 
 * {
@@ -391,3 +393,369 @@ body:not(.modo-oficial) .req-oficial { display: none !important; }
     .modal-footer-spacing { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
     .lista-asistencia-grid { grid-template-columns: 1fr; }
 }
+
+/* ========================================== */
+/* 15. TEMA "GRAFITO" (OPCIONAL)              */
+/* Base neutra oscura; el azul y el dorado    */
+/* quedan como acentos de identidad.          */
+/* ========================================== */
+html.tema-grafito {
+    --dorado: #d9ad3c;
+    --rojo-emergencia: #ef5350;
+    --verde-ok: #43c97a;
+    --texto-blanco: #eceef2;
+    --texto-gris: #9aa1ad;
+    --g-fondo: #0f1115;
+    --g-superficie: #171a20;
+    --g-superficie-2: #1e222a;
+    --g-hundido: #12151a;
+    --g-borde: rgba(255, 255, 255, 0.07);
+    --g-borde-fuerte: rgba(255, 255, 255, 0.12);
+    --g-azul: #5b8def;
+    --g-sombra: 0 1px 2px rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.2);
+}
+html.tema-grafito body { background-color: var(--g-fondo); }
+html.tema-grafito body::before {
+    width: 70vw; height: 70vw; top: -35%; left: -25%; right: auto;
+    background: rgba(47, 95, 179, 0.16); opacity: 1; animation: none; filter: blur(160px);
+}
+html.tema-grafito body::after {
+    width: 50vw; height: 50vw; bottom: -30%; right: -15%; left: auto;
+    background: rgba(217, 173, 60, 0.05); opacity: 1; animation: none; filter: blur(160px);
+}
+
+/* Menú */
+html.tema-grafito #menu-toggle {
+    background: var(--g-superficie-2); border: 1px solid var(--g-borde-fuerte);
+    backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+html.tema-grafito #menu-toggle:hover { background: #262b35; }
+html.tema-grafito .sidebar { background: #13161b; border-right: 1px solid var(--g-borde); box-shadow: 10px 0 40px rgba(0,0,0,0.5); }
+html.tema-grafito .logo-container { border-bottom-color: var(--g-borde); }
+html.tema-grafito .logo-container::after {
+    content: ""; position: absolute; left: 50%; bottom: -1px; width: 64px; height: 2px; margin-left: -32px;
+    border-radius: 2px; background: linear-gradient(90deg, var(--g-azul), var(--dorado));
+}
+html.tema-grafito .nav-item { color: #d5d9e0; }
+html.tema-grafito .nav-item i { color: var(--texto-gris); }
+html.tema-grafito .nav-item:hover { background-color: rgba(255,255,255,0.05); }
+html.tema-grafito .nav-item.active {
+    background-color: rgba(255,255,255,0.06); color: var(--texto-blanco);
+    border: 1px solid transparent; box-shadow: inset 3px 0 0 var(--dorado);
+}
+html.tema-grafito .nav-item.active i { color: var(--dorado); }
+html.tema-grafito .close-menu-btn { background: var(--g-superficie-2); border-color: var(--g-borde); }
+
+/* Superficies: sólidas y tranquilas en vez de vidrio con brillo */
+html.tema-grafito .glass-panel,
+html.tema-grafito .card-item,
+html.tema-grafito .kpi-card,
+html.tema-grafito .chart-container,
+html.tema-grafito .bombero-card {
+    background: var(--g-superficie); border: 1px solid var(--g-borde);
+    backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: var(--g-sombra);
+}
+html.tema-grafito .card-item { border-left: 3px solid rgba(91, 141, 239, 0.6); }
+html.tema-grafito .card-item:active { background: var(--g-superficie-2); }
+html.tema-grafito .card-title { color: var(--texto-blanco); }
+html.tema-grafito .title-header, html.tema-grafito .hero h1 { text-shadow: none; }
+html.tema-grafito .hero p { color: var(--texto-gris); }
+
+/* Botones */
+html.tema-grafito .btn-primary {
+    background: var(--dorado); color: #16181d;
+    box-shadow: 0 6px 18px rgba(217, 173, 60, 0.18);
+}
+html.tema-grafito .btn-primary:hover { background: #e2b94c; box-shadow: 0 8px 22px rgba(217, 173, 60, 0.25); }
+html.tema-grafito .btn-secundary {
+    background: var(--g-superficie-2); border: 1px solid var(--g-borde-fuerte);
+    backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;
+}
+html.tema-grafito .btn-secundary:active { background: #262b35; }
+html.tema-grafito .btn-text { color: var(--g-azul); text-shadow: none; }
+
+/* Formularios */
+html.tema-grafito .input-glass,
+html.tema-grafito input[type="datetime-local"].input-glass,
+html.tema-grafito input[type="date"].input-glass {
+    background: var(--g-hundido); border: 1px solid var(--g-borde-fuerte); box-shadow: none;
+}
+html.tema-grafito .input-glass:focus { border-color: var(--g-azul); background: var(--g-hundido); box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.2); }
+html.tema-grafito .input-glass option { background-color: var(--g-superficie-2); }
+html.tema-grafito ::-webkit-calendar-picker-indicator { filter: invert(0.75); }
+html.tema-grafito .form-group label { color: #c9ced6; text-shadow: none; }
+html.tema-grafito .checkbox-item {
+    background: var(--g-superficie-2); border: 1px solid var(--g-borde); box-shadow: none;
+}
+html.tema-grafito .checkbox-item:has(input:checked) {
+    background: rgba(91, 141, 239, 0.14); border-color: var(--g-azul); box-shadow: none;
+}
+html.tema-grafito .checkbox-item input { accent-color: var(--g-azul); }
+html.tema-grafito .info-box { background: var(--g-superficie-2); border-color: var(--g-borde); border-left: 4px solid var(--g-azul); box-shadow: none; }
+
+/* Etiquetas y estados */
+html.tema-grafito .badge { box-shadow: none; }
+html.tema-grafito .badge-red { background: rgba(239, 83, 80, 0.14); color: #f28b89; border-color: rgba(239, 83, 80, 0.3); }
+html.tema-grafito .badge-green { background: rgba(67, 201, 122, 0.14); color: #6fd99b; border-color: rgba(67, 201, 122, 0.3); }
+html.tema-grafito .badge-gold { background: rgba(217, 173, 60, 0.14); color: #e3bd5e; border-color: rgba(217, 173, 60, 0.3); }
+
+/* Modales */
+html.tema-grafito .modal { background-color: rgba(0,0,0,0.55); }
+html.tema-grafito .modal-content {
+    background: var(--g-superficie); border: 1px solid var(--g-borde);
+    box-shadow: 0 30px 60px rgba(0,0,0,0.55);
+}
+html.tema-grafito .modal-header { border-bottom-color: var(--g-borde); }
+html.tema-grafito .close-btn { background: var(--g-superficie-2); border-color: var(--g-borde); box-shadow: none; }
+
+/* Lista de asistencia */
+html.tema-grafito .bombero-card.bg-asiste { background: rgba(67, 201, 122, 0.1); border-color: rgba(67, 201, 122, 0.35); }
+html.tema-grafito .bombero-card.bg-licencia { background: rgba(217, 173, 60, 0.1); border-color: rgba(217, 173, 60, 0.35); }
+html.tema-grafito .segmented-control { background: var(--g-hundido); border-color: var(--g-borde); box-shadow: none; }
+html.tema-grafito .segment-btn { color: var(--texto-gris); }
+html.tema-grafito .segment-btn.active { background: var(--g-superficie-2); border: 1px solid var(--g-borde-fuerte); box-shadow: 0 1px 3px rgba(0,0,0,0.3); color: var(--texto-blanco); }
+html.tema-grafito .segment-btn[data-val="Participó"].active,
+html.tema-grafito .segment-btn[data-val="Asiste"].active { background: rgba(67, 201, 122, 0.16); border-color: rgba(67, 201, 122, 0.35); box-shadow: none; }
+html.tema-grafito .segment-btn[data-val="Licencia"].active { background: rgba(217, 173, 60, 0.16); border-color: rgba(217, 173, 60, 0.35); box-shadow: none; }
+
+/* Emergencia, bloqueo, mapa y plano */
+html.tema-grafito .banner-alerta { background: rgba(239, 83, 80, 0.12); border-color: rgba(239, 83, 80, 0.4); backdrop-filter: none; -webkit-backdrop-filter: none; }
+html.tema-grafito .lock-screen { background: rgba(15, 17, 21, 0.96); }
+html.tema-grafito .key-btn { background: rgba(255,255,255,0.07); border-color: var(--g-borde); box-shadow: none; }
+html.tema-grafito .map-container, html.tema-grafito .map-container-small { border: 1px solid var(--g-borde); box-shadow: var(--g-sombra); }
+html.tema-grafito .truck-blueprint { background: var(--g-hundido); border-color: var(--g-borde); box-shadow: none; }
+
+/* En celular el tema clásico fuerza fondos azules con !important; aquí se reemplazan */
+@media (max-width: 768px) {
+    html.tema-grafito .glass-panel,
+    html.tema-grafito .card-item,
+    html.tema-grafito .kpi-card,
+    html.tema-grafito .chart-container,
+    html.tema-grafito .bombero-card { background: var(--g-superficie) !important; box-shadow: var(--g-sombra) !important; }
+    html.tema-grafito .input-glass { background: var(--g-hundido) !important; box-shadow: none !important; }
+    html.tema-grafito .bombero-card.bg-asiste { background: rgba(67, 201, 122, 0.1) !important; }
+    html.tema-grafito .bombero-card.bg-licencia { background: rgba(217, 173, 60, 0.1) !important; }
+    html.tema-grafito .banner-alerta { background: rgba(239, 83, 80, 0.12) !important; }
+    html.tema-grafito .sidebar { background: #13161b !important; }
+    html.tema-grafito #menu-toggle { background: var(--g-superficie-2) !important; }
+    html.tema-grafito .lock-screen { background: rgba(15, 17, 21, 0.97) !important; }
+    html.tema-grafito .modal-content { background: var(--g-superficie) !important; }
+}
+
+/* Selector de estilo en el menú */
+.selector-tema { padding: 12px 20px 0; }
+.selector-tema-titulo { font-size: 0.7rem; font-weight: 700; letter-spacing: 1.5px; color: var(--texto-gris); margin-bottom: 8px; text-transform: uppercase; }
+.selector-tema .segment-btn { padding: 8px 0; font-size: 0.82rem; }
+
+/* Selector de fecha + hora en 24 h */
+.fecha-24 { display: flex; align-items: center; gap: 8px; }
+.fecha-24 input[type="date"] { flex: 2.2; min-width: 0; }
+.fecha-24 select { flex: 1; min-width: 0; text-align: center; text-align-last: center; padding-left: 8px; padding-right: 8px; }
+.fecha-24-sep { font-weight: 800; font-size: 1.2rem; color: var(--texto-gris); }
+
+/* ========================================== */
+/* 16. TEMA "CLARO" (OPCIONAL)                */
+/* Mucho blanco, con azul institucional y     */
+/* dorado como detalles.                      */
+/* ========================================== */
+html.tema-claro {
+    color-scheme: light;
+    --dorado: #b5850c;
+    --dorado-boton: #e5b73b;
+    --rojo-emergencia: #d63a3a;
+    --verde-ok: #1e9e55;
+    --texto-blanco: #172036;
+    --texto-gris: #5d6778;
+    --perfil-inactivo: #8a93a3;
+    --grilla-grafico: rgba(23, 32, 54, 0.08);
+    --c-fondo: #f4f6fa;
+    --c-superficie: #ffffff;
+    --c-suave: #f1f4f9;
+    --c-borde: rgba(23, 32, 54, 0.09);
+    --c-borde-fuerte: rgba(23, 32, 54, 0.16);
+    --c-azul: #1f4fa8;
+    --c-azul-tinte: rgba(31, 79, 168, 0.08);
+    --c-sombra: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 18px rgba(16, 24, 40, 0.06);
+}
+html.tema-claro body { background-color: var(--c-fondo); }
+html.tema-claro body::before {
+    width: 80vw; height: 50vw; top: -30%; right: -20%; left: auto;
+    background: rgba(31, 79, 168, 0.08); opacity: 1; animation: none; filter: blur(140px);
+}
+html.tema-claro body::after {
+    width: 50vw; height: 40vw; bottom: -25%; left: -15%; right: auto;
+    background: rgba(229, 183, 59, 0.10); opacity: 1; animation: none; filter: blur(140px);
+}
+
+/* Menú */
+html.tema-claro #menu-toggle {
+    background: var(--c-superficie); color: var(--c-azul); border: 1px solid var(--c-borde);
+    backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: var(--c-sombra);
+}
+html.tema-claro #menu-toggle:hover { background: var(--c-suave); }
+html.tema-claro .sidebar { background: var(--c-superficie); border-right: 1px solid var(--c-borde); box-shadow: 10px 0 40px rgba(16, 24, 40, 0.12); }
+html.tema-claro #sidebar-overlay { background: rgba(16, 24, 40, 0.2); }
+html.tema-claro .logo-container { border-bottom-color: var(--c-borde); }
+html.tema-claro .logo-container::after {
+    content: ""; position: absolute; left: 50%; bottom: -1px; width: 64px; height: 3px; margin-left: -32px;
+    border-radius: 3px; background: linear-gradient(90deg, var(--c-azul), var(--dorado-boton));
+}
+html.tema-claro .logo-container h2 { color: var(--c-azul); }
+html.tema-claro .logo-shield img { filter: drop-shadow(0 4px 10px rgba(16, 24, 40, 0.15)); }
+html.tema-claro .nav-item i { color: var(--texto-gris); }
+html.tema-claro .nav-item:hover { background-color: var(--c-suave); }
+html.tema-claro .nav-item.active {
+    background-color: var(--c-azul-tinte); color: var(--c-azul);
+    border: 1px solid transparent; box-shadow: inset 3px 0 0 var(--dorado-boton);
+}
+html.tema-claro .nav-item.active i { color: var(--c-azul); }
+html.tema-claro .close-menu-btn { background: var(--c-suave); border-color: var(--c-borde); }
+
+/* Superficies blancas */
+html.tema-claro .glass-panel,
+html.tema-claro .card-item,
+html.tema-claro .kpi-card,
+html.tema-claro .chart-container,
+html.tema-claro .bombero-card {
+    background: var(--c-superficie); border: 1px solid var(--c-borde);
+    backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: var(--c-sombra);
+}
+html.tema-claro .card-item { border-left: 3px solid var(--c-azul); }
+html.tema-claro .card-item:active { background: var(--c-suave); }
+html.tema-claro .card-title { color: var(--c-azul); }
+html.tema-claro .title-header, html.tema-claro .hero h1 { text-shadow: none; }
+html.tema-claro .hero h1 { color: var(--c-azul); }
+html.tema-claro .hero p { color: var(--texto-gris); }
+html.tema-claro .hero-logo-img { animation: fadeInScale 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; filter: drop-shadow(0 12px 24px rgba(16, 24, 40, 0.18)); }
+
+/* Botones */
+html.tema-claro .btn-primary {
+    background: var(--dorado-boton); color: #172036;
+    box-shadow: 0 6px 16px rgba(229, 183, 59, 0.35);
+}
+html.tema-claro .btn-primary:hover { background: #ecc251; }
+html.tema-claro .btn-secundary {
+    background: var(--c-superficie); color: var(--c-azul); border: 1px solid var(--c-borde-fuerte);
+    backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;
+}
+html.tema-claro .btn-secundary:active { background: var(--c-suave); }
+html.tema-claro .btn-text { color: var(--c-azul); text-shadow: none; }
+
+/* Formularios */
+html.tema-claro .input-glass,
+html.tema-claro input[type="datetime-local"].input-glass,
+html.tema-claro input[type="date"].input-glass {
+    background: var(--c-suave); color: var(--texto-blanco); border: 1px solid var(--c-borde-fuerte);
+    box-shadow: none; color-scheme: light;
+}
+html.tema-claro .input-glass::placeholder { color: #9aa2b1; }
+html.tema-claro .input-glass:focus { border-color: var(--c-azul); background: var(--c-superficie); box-shadow: 0 0 0 3px rgba(31, 79, 168, 0.15); }
+html.tema-claro .input-glass option { background-color: var(--c-superficie); color: var(--texto-blanco); }
+html.tema-claro ::-webkit-calendar-picker-indicator { filter: none; opacity: 0.6; }
+html.tema-claro .form-group label { color: #344054; text-shadow: none; }
+html.tema-claro .checkbox-item { background: var(--c-superficie); border: 1px solid var(--c-borde-fuerte); box-shadow: none; }
+html.tema-claro .checkbox-item:has(input:checked) { background: var(--c-azul-tinte); border-color: var(--c-azul); box-shadow: none; }
+html.tema-claro .checkbox-item input { accent-color: var(--c-azul); }
+html.tema-claro .info-box { background: var(--c-suave); border-color: var(--c-borde); border-left: 4px solid var(--c-azul); box-shadow: none; }
+
+/* Etiquetas */
+html.tema-claro .badge { box-shadow: none; }
+html.tema-claro .badge-red { background: #fde8e8; color: #b42318; border-color: #f6c4c0; }
+html.tema-claro .badge-green { background: #e6f6ec; color: #17733f; border-color: #b9e4c9; }
+html.tema-claro .badge-gold { background: #fdf3d7; color: #8a6508; border-color: #f0dca0; }
+
+/* Modales */
+html.tema-claro .modal { background-color: rgba(16, 24, 40, 0.35); }
+html.tema-claro .modal-content { background: var(--c-superficie); border: 1px solid var(--c-borde); box-shadow: 0 30px 60px rgba(16, 24, 40, 0.2); }
+html.tema-claro .modal-header { border-bottom-color: var(--c-borde); }
+html.tema-claro .close-btn { background: var(--c-suave); color: var(--texto-gris); border-color: var(--c-borde); box-shadow: none; }
+
+/* Lista de asistencia */
+html.tema-claro .bombero-card.bg-asiste { background: #eef9f2; border-color: #b9e4c9; }
+html.tema-claro .bombero-card.bg-licencia { background: #fdf8e8; border-color: #f0dca0; }
+html.tema-claro .segmented-control { background: #eaeef5; border-color: var(--c-borde); box-shadow: none; }
+html.tema-claro .segment-btn { color: var(--texto-gris); }
+html.tema-claro .segment-btn.active { background: var(--c-superficie); color: var(--texto-blanco); border: 1px solid var(--c-borde); box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12); }
+html.tema-claro .segment-btn[data-val="Participó"].active,
+html.tema-claro .segment-btn[data-val="Asiste"].active { background: #e6f6ec; color: #17733f; border-color: #b9e4c9; box-shadow: none; }
+html.tema-claro .segment-btn[data-val="Licencia"].active { background: #fdf3d7; color: #8a6508; border-color: #f0dca0; box-shadow: none; }
+
+/* Emergencia en curso */
+html.tema-claro .banner-alerta { background: #fdecec; border-color: #f3b4b4; backdrop-filter: none; -webkit-backdrop-filter: none; animation: pulsarBannerClaro 2.5s infinite; }
+html.tema-claro .banner-alerta h3 { color: #b42318; }
+html.tema-claro .banner-alerta p { color: #7a271a; }
+html.tema-claro .banner-alerta .btn-primary { box-shadow: 0 2px 8px rgba(180, 35, 24, 0.15); border: 1px solid #f3b4b4; }
+@keyframes pulsarBannerClaro { 0%, 100% { box-shadow: 0 6px 18px rgba(214, 58, 58, 0.12); } 50% { box-shadow: 0 6px 24px rgba(214, 58, 58, 0.35); } }
+
+/* PIN de oficial */
+html.tema-claro .lock-screen { background: rgba(244, 246, 250, 0.97); }
+html.tema-claro .lock-title { color: var(--c-azul); }
+html.tema-claro .pin-indicators .dot { border-color: var(--c-azul); }
+html.tema-claro .pin-indicators .dot.filled { background: var(--c-azul); }
+html.tema-claro .key-btn { background: var(--c-superficie); color: var(--texto-blanco); border-color: var(--c-borde); box-shadow: var(--c-sombra); }
+html.tema-claro .key-btn:active { background: var(--c-suave); }
+html.tema-claro .key-btn.text-btn { background: transparent; color: var(--c-azul); box-shadow: none; }
+
+/* Mapa y plano del carro: el plano queda como una lámina azul institucional */
+html.tema-claro .truck-blueprint .truck-techo { color: rgba(255, 255, 255, 0.8); border-color: rgba(255, 255, 255, 0.35); }
+html.tema-claro .truck-blueprint .truck-techo.active { color: #e5b73b; border-color: #e5b73b; }
+html.tema-claro .map-container, html.tema-claro .map-container-small { border: 1px solid var(--c-borde); box-shadow: var(--c-sombra); }
+html.tema-claro .truck-blueprint { background: #0d2659; border-color: transparent; box-shadow: var(--c-sombra); }
+html.tema-claro .truck-blueprint .gaveta-btn { color: rgba(255, 255, 255, 0.85); }
+html.tema-claro .truck-blueprint .gaveta-btn.active { color: #e5b73b; border-color: #e5b73b; }
+
+/* Selector de estilo y perfil en el menú */
+html.tema-claro .version-btn:hover { color: var(--rojo-emergencia); }
+
+/* Fondos y bordes escritos en línea dentro del HTML/JS (pensados para fondo oscuro) */
+html.tema-claro [style*="background: rgba(0,0,0,0."] { background: var(--c-suave) !important; }
+html.tema-claro [style*="background: rgba(255,255,255,0.1)"] { background: var(--c-azul-tinte) !important; color: var(--c-azul) !important; }
+html.tema-claro [style*="border: 1px dashed rgba(255,255,255"] { border-color: var(--c-borde-fuerte) !important; }
+html.tema-claro [style*="border: 1px solid rgba(255,255,255"] { border-color: var(--c-borde) !important; }
+html.tema-claro [style*="border-bottom: 1px solid rgba(255,255,255"] { border-bottom-color: var(--c-borde) !important; }
+html.tema-claro [style*="border-top: 1px solid rgba(255,255,255"] { border-top-color: var(--c-borde) !important; }
+
+/* En celular el tema Normal fuerza fondos azules con !important; aquí se reemplazan */
+@media (max-width: 768px) {
+    html.tema-claro .glass-panel,
+    html.tema-claro .card-item,
+    html.tema-claro .kpi-card,
+    html.tema-claro .chart-container,
+    html.tema-claro .bombero-card { background: var(--c-superficie) !important; box-shadow: var(--c-sombra) !important; }
+    html.tema-claro .input-glass { background: var(--c-suave) !important; box-shadow: none !important; }
+    html.tema-claro .bombero-card.bg-asiste { background: #eef9f2 !important; }
+    html.tema-claro .bombero-card.bg-licencia { background: #fdf8e8 !important; }
+    html.tema-claro .banner-alerta { background: #fdecec !important; }
+    html.tema-claro .sidebar { background: var(--c-superficie) !important; }
+    html.tema-claro #menu-toggle { background: var(--c-superficie) !important; }
+    html.tema-claro .lock-screen { background: rgba(244, 246, 250, 0.98) !important; }
+    html.tema-claro .modal-content { background: var(--c-superficie) !important; }
+}
+
+/* ========================================== */
+/* 17. AGREGAR MATERIAL A UNA GAVETA          */
+/* ========================================== */
+.agregar-material-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; border-style: dashed; }
+.agregar-material-btn #lbl-agregar-gaveta { color: var(--dorado); font-weight: 800; }
+.form-agregar-material {
+    background: rgba(0,0,0,0.2); padding: 16px; border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.12); animation: slideUp 0.25s;
+}
+.form-agregar-titulo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-weight: 700; color: var(--texto-blanco); }
+.form-agregar-material .form-group label, .form-agregar-label { display: block; margin-bottom: 8px; font-size: 0.9rem; font-weight: 500; color: var(--texto-gris); }
+.stepper-cantidad { display: flex; align-items: stretch; gap: 6px; }
+.stepper-cantidad input { text-align: center; padding-left: 4px; padding-right: 4px; min-width: 0; -moz-appearance: textfield; }
+.stepper-cantidad input::-webkit-outer-spin-button, .stepper-cantidad input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.stepper-cantidad button {
+    flex: 0 0 42px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.08); color: var(--texto-blanco); font-size: 1.3rem; font-weight: 700; cursor: pointer;
+}
+.stepper-cantidad button:active { transform: scale(0.94); }
+.form-agregar-opcional summary { cursor: pointer; color: var(--texto-gris); font-size: 0.9rem; list-style: none; user-select: none; }
+.form-agregar-opcional[open] summary { color: var(--texto-blanco); }
+.txt-material-agregado { color: var(--verde-ok); font-size: 0.85rem; text-align: center; margin-top: 10px; min-height: 1em; }
+html.tema-grafito .form-agregar-material { background: var(--g-hundido); border-color: var(--g-borde-fuerte); }
+html.tema-grafito .stepper-cantidad button { background: var(--g-superficie-2); border-color: var(--g-borde-fuerte); }
+html.tema-claro .form-agregar-material { background: var(--c-suave); border-color: var(--c-borde-fuerte); }
+html.tema-claro .stepper-cantidad button { background: var(--c-superficie); border-color: var(--c-borde-fuerte); color: var(--c-azul); }
+html.tema-claro .agregar-material-btn #lbl-agregar-gaveta { color: var(--c-azul); }

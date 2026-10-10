@@ -29,6 +29,7 @@ let MEMORIA_OFICIALES = [];
 
 // Catálogo de permisos que se pueden asignar a cada oficial
 const CATALOGO_PERMISOS = [
+    { key: "crear_servicios", grupo: "Servicios", label: "Crear servicios y emergencias", desc: "Muestra el botón Nuevo Servicio en el Inicio." },
     { key: "editar_servicios", grupo: "Servicios", label: "Editar, cerrar, fusionar y eliminar servicios", desc: "También permite registrar servicios con fechas atrasadas y ver el PIN de servicios en curso." },
     { key: "historico", grupo: "Servicios", label: "Ver meses anteriores", desc: "Historial, estadísticas y fichas sin el límite del mes actual." },
     { key: "licencias", grupo: "Personal", label: "Registro de Licencias", desc: "Ver y resolver las licencias solicitadas." },
@@ -90,7 +91,7 @@ function aplicarPermisos() {
         document.body.classList.remove("modo-oficial");
         if(btnPerfil) {
             btnPerfil.innerHTML = `<i class="fa-solid fa-user"></i> Perfil: Voluntario`;
-            btnPerfil.style.color = "rgba(255,255,255,0.4)";
+            btnPerfil.style.color = "var(--perfil-inactivo)";
         }
     }
 
@@ -225,6 +226,45 @@ document.addEventListener("keydown", (e) => {
         cerrarPadAdmin();
     }
 });
+
+// ==========================================
+// FORMATO DE FECHA Y HORA (24 HORAS, CHILE)
+// ==========================================
+function fechaCL(valor) {
+    return new Date(valor).toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+function horaCL(valor, conSegundos = false) {
+    const opciones = { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
+    if (conSegundos) opciones.second = "2-digit";
+    return new Date(valor).toLocaleTimeString("es-CL", opciones);
+}
+
+// Selector de fecha + hora en 24 h (reemplaza al datetime-local, que en muchos teléfonos muestra a.m./p.m.).
+// El valor real sigue viviendo en el input oculto "base" con formato AAAA-MM-DDTHH:MM.
+function prepararSelectorFecha24(base) {
+    const hh = document.getElementById(`${base}-hh`);
+    const mm = document.getElementById(`${base}-mm`);
+    if (hh && hh.options.length === 0) hh.innerHTML = Array.from({ length: 24 }, (_, i) => `<option value="${String(i).padStart(2, "0")}">${String(i).padStart(2, "0")}</option>`).join("");
+    if (mm && mm.options.length === 0) mm.innerHTML = Array.from({ length: 60 }, (_, i) => `<option value="${String(i).padStart(2, "0")}">${String(i).padStart(2, "0")}</option>`).join("");
+}
+function mostrarFecha24(base) {
+    prepararSelectorFecha24(base);
+    const oculto = document.getElementById(base);
+    const dia = document.getElementById(`${base}-dia`);
+    const [fecha = "", hora = "00:00"] = (oculto.value || "").split("T");
+    dia.value = fecha;
+    document.getElementById(`${base}-hh`).value = hora.slice(0, 2);
+    document.getElementById(`${base}-mm`).value = hora.slice(3, 5);
+    // Los límites de fecha (voluntarios: hoy o ayer) se aplican al calendario visible
+    if (oculto.getAttribute("min")) dia.min = oculto.getAttribute("min").slice(0, 10); else dia.removeAttribute("min");
+    if (oculto.getAttribute("max")) dia.max = oculto.getAttribute("max").slice(0, 10); else dia.removeAttribute("max");
+}
+window.sincronizarFecha24 = function(base) {
+    const dia = document.getElementById(`${base}-dia`).value;
+    const hh = document.getElementById(`${base}-hh`).value;
+    const mm = document.getElementById(`${base}-mm`).value;
+    document.getElementById(base).value = dia ? `${dia}T${hh}:${mm}` : "";
+}
 
 // ==========================================
 // 2. DATOS INSTITUCIONALES TERCERA COMPAÑÍA
@@ -509,6 +549,7 @@ window.alCambiarActividad = function() {
 }
 
 window.irPaso1 = function() {
+    if (!tienePermiso("crear_servicios")) { alert("🔒 Solo los Ayudantes y oficiales autorizados pueden crear servicios."); return; }
     reporteTemporal = {
         actividad: "", direccion: "", fecha: null, esActividadInterna: false,
         maquinasUtilizadas: [], latitud: DatosClaves.latBase, longitud: DatosClaves.lonBase,
@@ -536,6 +577,7 @@ window.irPaso1 = function() {
         inpFecha.min = ayer.toISOString().slice(0,16);
         inpFecha.max = now.toISOString().slice(0,16);
     }
+    mostrarFecha24("inp-fecha");
 
     document.getElementById("inp-direccion").value = "";
     
@@ -953,9 +995,9 @@ function cargarHistorial() {
             <div class="card-item" onclick="verDetalleReporte('${r.id}')">
                 <div class="card-header" style="align-items: flex-start;">
                     <span class="card-title">${tituloReclasificado} ${badgeDoble}</span>
-                    <span class="card-date">${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    <span class="card-date">${fechaCL(d)} ${horaCL(d)}</span>
                 </div>
-                <div style="color: white; margin: 8px 0;">${r.direccion} ${badgeEstado}</div>
+                <div style="color: var(--texto-blanco); margin: 8px 0;">${r.direccion} ${badgeEstado}</div>
                 <div class="card-body">
                     <span><span class="material-symbols-outlined" style="color: var(--rojo-emergencia); font-size: 1.2rem; vertical-align: text-bottom; margin-right: 4px;">fire_truck</span> ${maquinas}</span>
                     <span style="color: var(--verde-ok);"><i class="fa-solid fa-users"></i> ${r.asistentesNombres.length} Asistencias</span>
@@ -976,9 +1018,9 @@ window.verDetalleReporte = function(id) {
 
     let html = `
         <div class="info-box" style="margin-bottom: 20px;">
-            <h3 style="color: white; margin-bottom: 5px;">${tituloDetalle}</h3>
+            <h3 style="color: var(--texto-blanco); margin-bottom: 5px;">${tituloDetalle}</h3>
             <p style="color: var(--texto-gris); font-size: 0.9rem;">${r.direccion}</p>
-            <p style="color: var(--texto-gris); font-size: 0.9rem;">${d.toLocaleDateString()} a las ${d.toLocaleTimeString()}</p>
+            <p style="color: var(--texto-gris); font-size: 0.9rem;">${fechaCL(d)} a las ${horaCL(d)}</p>
         </div>
         ${badgeDobleDetalle}
         <h4 style="color: var(--dorado); margin-bottom: 10px;">Asistentes Confirmados (${r.asistentesNombres.length})</h4>
@@ -996,7 +1038,7 @@ window.verDetalleReporte = function(id) {
     
     if(r.estadoServicio === "En Curso" && esOficial) {
         html += `<div style="text-align: center; margin-bottom: 15px; padding: 10px; background: rgba(255, 77, 77, 0.2); border-radius: 10px; border: 1px solid var(--rojo-emergencia);">
-            <p style="color: white; font-weight: bold;">SERVICIO EN CURSO</p>
+            <p style="color: var(--texto-blanco); font-weight: bold;">SERVICIO EN CURSO</p>
             <p style="color: var(--dorado); font-size: 0.9rem;">PIN Autoregistro: ${r.pinEmergencia}</p>
         </div>`;
     }
@@ -1029,7 +1071,7 @@ window.abrirSelectorFusion = function(id) {
         .sort((a, b) => b.fecha - a.fecha);
 
     const dPrincipal = new Date(principal.fecha);
-    document.getElementById("fusion-info-principal").innerText = `${principal.actividad} — ${principal.direccion} — ${dPrincipal.toLocaleDateString()} ${dPrincipal.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} (${principal.asistentesNombres.length} asistentes)`;
+    document.getElementById("fusion-info-principal").innerText = `${principal.actividad} — ${principal.direccion} — ${fechaCL(dPrincipal)} ${horaCL(dPrincipal)} (${principal.asistentesNombres.length} asistentes)`;
 
     const sel = document.getElementById("fusion-select-duplicado");
     if (candidatos.length === 0) {
@@ -1037,7 +1079,7 @@ window.abrirSelectorFusion = function(id) {
     } else {
         sel.innerHTML = `<option value="">-- Selecciona el servicio duplicado --</option>` + candidatos.map(r => {
             const d = new Date(r.fecha);
-            return `<option value="${r.id}">${r.actividad} — ${r.direccion} — ${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} (${r.asistentesNombres.length} asist.)</option>`;
+            return `<option value="${r.id}">${r.actividad} — ${r.direccion} — ${fechaCL(d)} ${horaCL(d)} (${r.asistentesNombres.length} asist.)</option>`;
         }).join('');
     }
 
@@ -1115,6 +1157,9 @@ window.abrirEdicionReporte = function(id) {
     const now = new Date(r.fecha);
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
     document.getElementById("edit-fecha").value = now.toISOString().slice(0,16);
+    document.getElementById("edit-fecha").removeAttribute("min");
+    document.getElementById("edit-fecha").removeAttribute("max");
+    mostrarFecha24("edit-fecha");
 
     const maquinas = MEMORIA_MAQUINAS;
     const nomenclaturasStandar = maquinas.map(m => m.nomenclatura);
@@ -1348,8 +1393,11 @@ window.actualizarDashboard = function() {
     const dataGrafico = Object.values(conteoAct);
 
     if(graficoEmergenciasInstancia) graficoEmergenciasInstancia.destroy();
+    const estilosTema = getComputedStyle(document.documentElement);
+    const colorTextoGrafico = estilosTema.getPropertyValue('--texto-blanco').trim() || 'white';
+    const colorGrillaGrafico = estilosTema.getPropertyValue('--grilla-grafico').trim() || 'rgba(255,255,255,0.1)';
     const ctx = document.getElementById('grafico-emergencias').getContext('2d');
-    graficoEmergenciasInstancia = new Chart(ctx, { type: 'bar', data: { labels: labelsGrafico, datasets: [{ label: 'Cantidad', data: dataGrafico, backgroundColor: '#ff4d4d', borderRadius: 5 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: 'white', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.1)' } }, x: { ticks: { color: 'white' }, grid: { display: false } } } } });
+    graficoEmergenciasInstancia = new Chart(ctx, { type: 'bar', data: { labels: labelsGrafico, datasets: [{ label: 'Cantidad', data: dataGrafico, backgroundColor: '#ff4d4d', borderRadius: 5 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: colorTextoGrafico, stepSize: 1 }, grid: { color: colorGrillaGrafico } }, x: { ticks: { color: colorTextoGrafico }, grid: { display: false } } } } });
 }
 
 // ==========================================
@@ -1441,7 +1489,7 @@ window.cargarRankingPersonal = function() {
         <div class="card-item" onclick='abrirFichaPersonal("${b.nombre}")' style="flex-direction: row; align-items: center;">
             ${ladoIzquierdo}
             <div style="flex-grow: 1;">
-                <div style="font-weight: bold; color: white;">${b.nombre}</div>
+                <div style="font-weight: bold; color: var(--texto-blanco);">${b.nombre}</div>
                 <div style="font-size: 0.8rem; color: var(--texto-gris);">${b.cargo}</div>
             </div>
             ${valorBadge}
@@ -1563,7 +1611,7 @@ function renderizarFichaPersonal(nombre, periodo) {
     document.getElementById("contenido-ficha-personal").innerHTML = `
         <div style="text-align: center; margin-bottom: 20px;">
             <i class="fa-solid fa-user-shield" style="font-size: 4rem; color: var(--dorado); margin-bottom: 10px;"></i>
-            <h3 style="color: white; font-size: 1.5rem;">${b.nombre}</h3>
+            <h3 style="color: var(--texto-blanco); font-size: 1.5rem;">${b.nombre}</h3>
             <p style="color: var(--texto-gris);">${b.cargo}</p>
         </div>
 
@@ -1606,22 +1654,22 @@ function renderizarFichaPersonal(nombre, periodo) {
             <div class="card-item" style="padding: 16px; margin-bottom: 20px; border-left: 3px solid var(--rojo-emergencia);">
                 <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.95rem;">
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Casco (Código):</span> <span style="font-weight: 600; color: white;">${b.eppEstructural?.casco || 'No Registrado'}</span>
+                        <span style="color: var(--texto-gris);">Casco (Código):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.casco || 'No Registrado'}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Chaqueta (Cod/Talla):</span> <span style="font-weight: 600; color: white;">${b.eppEstructural?.chaqueta || 'No Registrado'}</span>
+                        <span style="color: var(--texto-gris);">Chaqueta (Cod/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.chaqueta || 'No Registrado'}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Jardinera (Cod/Talla):</span> <span style="font-weight: 600; color: white;">${b.eppEstructural?.jardinera || 'No Registrado'}</span>
+                        <span style="color: var(--texto-gris);">Jardinera (Cod/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.jardinera || 'No Registrado'}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Botas (Marca/Talla):</span> <span style="font-weight: 600; color: white;">${b.eppEstructural?.botas || 'No Registrado'}</span>
+                        <span style="color: var(--texto-gris);">Botas (Marca/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.botas || 'No Registrado'}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Guantes (Marca/Talla):</span> <span style="font-weight: 600; color: white;">${b.eppEstructural?.guantes || 'No Registrado'}</span>
+                        <span style="color: var(--texto-gris);">Guantes (Marca/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.guantes || 'No Registrado'}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="color: var(--texto-gris);">Esclavina (Sí/No):</span> <span style="font-weight: 600; color: white;">${b.eppEstructural?.esclavina || 'No Registrado'}</span>
+                        <span style="color: var(--texto-gris);">Esclavina (Sí/No):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.esclavina || 'No Registrado'}</span>
                     </div>
                 </div>
             </div>
@@ -1630,16 +1678,16 @@ function renderizarFichaPersonal(nombre, periodo) {
             <div class="card-item" style="padding: 16px; border-left: 3px solid var(--verde-ok);">
                 <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.95rem;">
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Casco (Código):</span> <span style="font-weight: 600; color: white;">${b.eppMultirol?.casco || 'No Registrado'}</span>
+                        <span style="color: var(--texto-gris);">Casco (Código):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppMultirol?.casco || 'No Registrado'}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Chaqueta (Cod/Talla):</span> <span style="font-weight: 600; color: white;">${b.eppMultirol?.chaqueta || 'No Registrado'}</span>
+                        <span style="color: var(--texto-gris);">Chaqueta (Cod/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppMultirol?.chaqueta || 'No Registrado'}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Pantalón (Cod/Talla):</span> <span style="font-weight: 600; color: white;">${b.eppMultirol?.pantalon || 'No Registrado'}</span>
+                        <span style="color: var(--texto-gris);">Pantalón (Cod/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppMultirol?.pantalon || 'No Registrado'}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="color: var(--texto-gris);">Botas (Marca/Talla):</span> <span style="font-weight: 600; color: white;">${b.eppMultirol?.botas || 'No Registrado'}</span>
+                        <span style="color: var(--texto-gris);">Botas (Marca/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppMultirol?.botas || 'No Registrado'}</span>
                     </div>
                 </div>
             </div>
@@ -1679,6 +1727,20 @@ const inventarioBaseB3 = [
     { ubicacion: "Techo", nombreItem: "Escalas", cant: 2 }
 ];
 
+// Gavetas de cada unidad, en el mismo orden del plano
+const GAVETAS_POR_UNIDAD = {
+    "B-3": ["Cabina", "Techo", "G-1", "G-2", "G-3", "G-4", "G-5", "G-6"],
+    "BX-3": ["Cabina", "Techo", "C-1", "C-2", "C-3", "C-4"],
+    "G-3": ["Cabina", "Pick-up"]
+};
+function gavetasDeUnidad(maquinaId) {
+    const m = MEMORIA_MAQUINAS.find(x => x.id === maquinaId);
+    const base = (m && GAVETAS_POR_UNIDAD[m.nomenclatura]) || [];
+    const usadas = MEMORIA_INVENTARIO.filter(i => i.maquinaId === maquinaId).map(i => i.ubicacion);
+    return [...new Set([...base, ...usadas])];
+}
+const normalizarNombre = (t) => (t || "").toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
 window.cargarInventarioCarros = function() {
     const maquinas = MEMORIA_MAQUINAS;
     const reportes = MEMORIA_REPORTES;
@@ -1696,7 +1758,7 @@ window.cargarInventarioCarros = function() {
             <div class="card-item" onclick="abrirDetalleMaquina('${m.id}')" style="flex-direction: row; align-items: center;">
                 <div style="font-size: 2rem; color: var(--dorado); width: 60px; text-align: center; display: flex; justify-content: center; align-items: center;">${iconoCarro}</div>
                 <div style="flex-grow: 1;">
-                    <div style="font-weight: bold; color: white; font-size: 1.2rem;">${m.nomenclatura}</div>
+                    <div style="font-weight: bold; color: var(--texto-blanco); font-size: 1.2rem;">${m.nomenclatura}</div>
                     <div style="font-size: 0.85rem; color: ${colorSt}; font-weight: bold;">Estado: ${m.estado}</div>
                 </div>
                 <div style="color: var(--texto-gris); font-size: 0.9rem;">${salidas} salidas</div>
@@ -1793,6 +1855,9 @@ window.abrirDetalleMaquina = async function(id) {
 window.seleccionarGaveta = function(gaveta) {
     gavetaSeleccionada = gaveta;
     document.querySelectorAll(".gaveta-btn").forEach(btn => btn.classList.remove("active"));
+    // Activa todas las zonas marcadas con data-gaveta, además del botón con id btn-gav-*
+    const zonas = document.querySelectorAll(`[data-gaveta="${gaveta}"]`);
+    if (zonas.length) zonas.forEach(z => z.classList.add("active"));
     const btnActivo = document.getElementById(`btn-gav-${gaveta}`);
     if(btnActivo) btnActivo.classList.add("active");
     
@@ -1803,15 +1868,30 @@ window.seleccionarGaveta = function(gaveta) {
 }
 
 function renderizarItemsMaquina(id, esOficial) {
-    const items = MEMORIA_INVENTARIO.filter(i => i.maquinaId === id && i.ubicacion === gavetaSeleccionada);
+    const items = MEMORIA_INVENTARIO.filter(i => i.maquinaId === id && i.ubicacion === gavetaSeleccionada)
+        .sort((a, b) => (a.nombreItem || "").localeCompare(b.nombreItem || "", "es"));
+
+    const contador = document.getElementById("lbl-gaveta-cantidad");
+    if (contador) contador.innerText = items.length === 1 ? "1 elemento" : `${items.length} elementos`;
+    const lblAgregar = document.getElementById("lbl-agregar-gaveta");
+    if (lblAgregar) lblAgregar.innerText = gavetaSeleccionada;
+    const selGav = document.getElementById("nuevo-item-gaveta");
+    if (selGav && document.getElementById("form-agregar-material").style.display !== "none") selGav.value = gavetaSeleccionada;
 
     document.getElementById("lista-items-maquina").innerHTML = items.length === 0 ? `<p style='color: var(--texto-gris); font-size: 0.9rem; text-align: center; margin-top: 10px;'><i class="fa-solid fa-box-open"></i> Gaveta ${gavetaSeleccionada} sin herramientas registradas.</p>` : items.map(i => {
         const btnBorrar = esOficial ? `<button class="btn-text" style="color: var(--rojo-emergencia); padding: 5px;" onclick="event.stopPropagation(); eliminarItem('${i.id}')"><i class="fa-solid fa-trash"></i></button>` : "";
         const estadoItem = i.estado || "Operativo";
         const colorSemaforo = estadoItem === "Operativo" ? "var(--verde-ok)" : (estadoItem === "Requiere Mantención" ? "var(--dorado)" : "var(--rojo-emergencia)");
+        const actual = i.cantidadActual ?? 0;
+        const requerida = i.cantidadTeorica ?? actual;
+        const faltan = requerida - actual;
+        const cantidadHTML = faltan > 0
+            ? `<span style="color: var(--rojo-emergencia); font-weight: bold;">${actual} de ${requerida}</span> <span style="color: var(--rojo-emergencia);">· faltan ${faltan}</span>`
+            : `<span style="color: var(--texto-blanco); font-weight: bold;">${actual}</span>${requerida !== actual ? ` <span>(requeridas ${requerida})</span>` : ""}`;
+        const codigoHTML = i.codigo ? ` · <i class="fa-solid fa-hashtag"></i> ${i.codigo}` : "";
         return `
         <div onclick="abrirPerfilHerramienta('${i.id}')" style="cursor: pointer; background: rgba(0,0,0,0.3); padding: 12px 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid ${colorSemaforo}; margin-bottom: 8px;">
-            <div><div style="color: white; font-weight: bold; font-size: 0.95rem;">${i.nombreItem}</div><div style="color: var(--texto-gris); font-size: 0.8rem; margin-top: 3px;">Cantidad Requerida: <span style="color: white; font-weight: bold;">${i.cantidadActual}</span></div></div>
+            <div><div style="color: var(--texto-blanco); font-weight: bold; font-size: 0.95rem;">${i.nombreItem}</div><div style="color: var(--texto-gris); font-size: 0.8rem; margin-top: 3px;">Cantidad: ${cantidadHTML}${codigoHTML}</div></div>
             ${btnBorrar}
         </div>`;
     }).join('');
@@ -1823,26 +1903,89 @@ window.actualizarEstadoMaquina = async function() {
     await updateDoc(doc(dbCloud, "maquinas", maquinaEditandoId), {estado: nuevoEst});
 }
 
-window.agregarItemInventario = async function() {
+window.abrirFormAgregarMaterial = function() {
     if (!tienePermiso("editar_material")) { alert("🔒 No tienes permiso para esta acción."); return; }
-    const nom = document.getElementById("nuevo-item-nombre").value;
-    const cant = parseInt(document.getElementById("nuevo-item-cant").value) || 1;
-    if(!nom) { alert("Ingresa el nombre de la herramienta."); return; }
+    const sel = document.getElementById("nuevo-item-gaveta");
+    sel.innerHTML = gavetasDeUnidad(maquinaEditandoId).map(g => `<option value="${g}">${g}</option>`).join("");
+    sel.value = gavetaSeleccionada;
 
-    await addDoc(collection(dbCloud, "inventario"), { 
-        maquinaId: maquinaEditandoId, 
-        nombreItem: nom, 
-        ubicacion: gavetaSeleccionada, 
-        cantidadTeorica: cant, 
-        cantidadActual: cant, 
-        estado: "Operativo",
-        codigo: "",
-        fechaPuestaServicio: "",
-        bitacora: []
-    });
-    
+    // Sugerencias con los nombres ya usados en todas las unidades, para escribirlos siempre igual
+    const nombres = [...new Map(MEMORIA_INVENTARIO.filter(i => i.nombreItem).map(i => [normalizarNombre(i.nombreItem), i.nombreItem])).values()]
+        .sort((a, b) => a.localeCompare(b, "es"));
+    document.getElementById("sugerencias-material").innerHTML = nombres.map(n => `<option value="${n.replace(/"/g, "&quot;")}"></option>`).join("");
+
+    limpiarFormAgregarMaterial();
+    document.getElementById("btn-abrir-agregar-material").style.display = "none";
+    document.getElementById("form-agregar-material").style.display = "block";
+    document.getElementById("txt-material-agregado").innerText = "";
+    setTimeout(() => document.getElementById("nuevo-item-nombre").focus(), 50);
+}
+
+window.cerrarFormAgregarMaterial = function() {
+    document.getElementById("form-agregar-material").style.display = "none";
+    document.getElementById("btn-abrir-agregar-material").style.display = "flex";
+}
+
+function limpiarFormAgregarMaterial() {
     document.getElementById("nuevo-item-nombre").value = "";
     document.getElementById("nuevo-item-cant").value = "1";
+    document.getElementById("nuevo-item-estado").value = "Operativo";
+    document.getElementById("nuevo-item-codigo").value = "";
+    document.getElementById("nuevo-item-fecha").value = "";
+}
+
+window.cambiarCantidadNuevoItem = function(delta) {
+    const inp = document.getElementById("nuevo-item-cant");
+    inp.value = Math.max(1, (parseInt(inp.value) || 1) + delta);
+}
+
+window.agregarItemInventario = async function(seguirAgregando = false) {
+    if (!tienePermiso("editar_material")) { alert("🔒 No tienes permiso para esta acción."); return; }
+    const nom = document.getElementById("nuevo-item-nombre").value.trim();
+    const cant = Math.max(1, parseInt(document.getElementById("nuevo-item-cant").value) || 1);
+    const gaveta = document.getElementById("nuevo-item-gaveta").value || gavetaSeleccionada;
+    const estado = document.getElementById("nuevo-item-estado").value;
+    const codigo = document.getElementById("nuevo-item-codigo").value.trim();
+    const fecha = document.getElementById("nuevo-item-fecha").value;
+    if (!nom) { alert("Ingresa el nombre del material."); document.getElementById("nuevo-item-nombre").focus(); return; }
+
+    // Si el mismo material ya está en esa gaveta, se ofrece sumar en vez de duplicar
+    const existente = !codigo && MEMORIA_INVENTARIO.find(i => i.maquinaId === maquinaEditandoId && i.ubicacion === gaveta && normalizarNombre(i.nombreItem) === normalizarNombre(nom));
+    try {
+        if (existente && confirm(`"${existente.nombreItem}" ya está en ${gaveta} (cantidad ${existente.cantidadActual ?? 0}).\n\n¿Sumar ${cant} a ese registro?\n(Cancelar = crearlo como un elemento aparte)`)) {
+            await updateDoc(doc(dbCloud, "inventario", existente.id), {
+                cantidadTeorica: (existente.cantidadTeorica ?? 0) + cant,
+                cantidadActual: (existente.cantidadActual ?? 0) + cant
+            });
+            document.getElementById("txt-material-agregado").innerText = `✓ Sumado: ${existente.nombreItem} +${cant} en ${gaveta}`;
+        } else {
+            await addDoc(collection(dbCloud, "inventario"), {
+                maquinaId: maquinaEditandoId,
+                nombreItem: nom,
+                ubicacion: gaveta,
+                cantidadTeorica: cant,
+                cantidadActual: cant,
+                estado: estado,
+                codigo: codigo,
+                fechaPuestaServicio: fecha,
+                bitacora: []
+            });
+            document.getElementById("txt-material-agregado").innerText = `✓ Agregado: ${nom} ×${cant} en ${gaveta}`;
+        }
+    } catch (e) {
+        alert("Error al guardar. Revisa tu conexión.");
+        return;
+    }
+
+    // Mostrar la gaveta donde quedó el material
+    if (gaveta !== gavetaSeleccionada) seleccionarGaveta(gaveta);
+
+    if (seguirAgregando) {
+        limpiarFormAgregarMaterial();
+        document.getElementById("nuevo-item-nombre").focus();
+    } else {
+        cerrarFormAgregarMaterial();
+    }
 }
 
 window.eliminarItem = async function(idItem) {
@@ -1866,17 +2009,20 @@ window.abrirPerfilHerramienta = function(idItem) {
     document.getElementById("perfil-herr-input-codigo").value = item.codigo || "";
     document.getElementById("perfil-herr-input-fecha").value = item.fechaPuestaServicio || "";
     document.getElementById("perfil-herr-input-estado").value = item.estado || "Operativo";
+    const selGavPerfil = document.getElementById("perfil-herr-input-gaveta");
+    selGavPerfil.innerHTML = gavetasDeUnidad(item.maquinaId).map(g => `<option value="${g}">${g}</option>`).join("");
+    selGavPerfil.value = item.ubicacion;
 
     const puedeEditarHerr = tienePermiso("editar_material");
-    ["perfil-herr-input-nombre","perfil-herr-input-cantteo","perfil-herr-input-cantact","perfil-herr-input-codigo","perfil-herr-input-fecha","perfil-herr-input-estado"]
+    ["perfil-herr-input-nombre","perfil-herr-input-cantteo","perfil-herr-input-cantact","perfil-herr-input-codigo","perfil-herr-input-fecha","perfil-herr-input-estado","perfil-herr-input-gaveta"]
         .forEach(idCampo => document.getElementById(idCampo).disabled = !puedeEditarHerr);
 
     const resumen = document.getElementById("perfil-herr-resumen");
     const estadoItem = item.estado || "Operativo";
     const colorSemaforo = estadoItem === "Operativo" ? "var(--verde-ok)" : (estadoItem === "Requiere Mantención" ? "var(--dorado)" : "var(--rojo-emergencia)");
     let badges = `<span style="background: ${colorSemaforo}; color: #051024; font-weight: bold; padding: 5px 12px; border-radius: 20px; font-size: 0.8rem;">${estadoItem}</span>`;
-    if (item.codigo) badges += `<span style="background: rgba(255,255,255,0.1); color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.8rem;"><i class="fa-solid fa-hashtag"></i> ${item.codigo}</span>`;
-    if (item.fechaPuestaServicio) badges += `<span style="background: rgba(255,255,255,0.1); color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.8rem;"><i class="fa-solid fa-calendar-check"></i> En servicio desde ${item.fechaPuestaServicio}</span>`;
+    if (item.codigo) badges += `<span style="background: rgba(255,255,255,0.1); color: var(--texto-blanco); padding: 5px 12px; border-radius: 20px; font-size: 0.8rem;"><i class="fa-solid fa-hashtag"></i> ${item.codigo}</span>`;
+    if (item.fechaPuestaServicio) badges += `<span style="background: rgba(255,255,255,0.1); color: var(--texto-blanco); padding: 5px 12px; border-radius: 20px; font-size: 0.8rem;"><i class="fa-solid fa-calendar-check"></i> En servicio desde ${item.fechaPuestaServicio}</span>`;
     resumen.innerHTML = badges;
 
     document.getElementById("perfil-herr-nueva-texto").value = "";
@@ -1897,9 +2043,9 @@ function renderizarBitacoraHerramienta(bitacora) {
         <div style="background: rgba(0,0,0,0.25); padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid ${colorTipo[n.tipo] || "var(--texto-gris)"};">
             <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--texto-gris); margin-bottom: 4px;">
                 <span style="font-weight: bold; color: ${colorTipo[n.tipo] || "var(--texto-gris)"};">${n.tipo}</span>
-                <span>${new Date(n.fecha).toLocaleDateString()}</span>
+                <span>${fechaCL(n.fecha)}</span>
             </div>
-            <div style="color: white; font-size: 0.9rem;">${n.texto}</div>
+            <div style="color: var(--texto-blanco); font-size: 0.9rem;">${n.texto}</div>
         </div>
     `).join('');
 }
@@ -1916,7 +2062,8 @@ window.guardarPerfilHerramienta = async function() {
         cantidadActual: parseInt(document.getElementById("perfil-herr-input-cantact").value) || 0,
         codigo: document.getElementById("perfil-herr-input-codigo").value.trim(),
         fechaPuestaServicio: document.getElementById("perfil-herr-input-fecha").value,
-        estado: document.getElementById("perfil-herr-input-estado").value
+        estado: document.getElementById("perfil-herr-input-estado").value,
+        ubicacion: document.getElementById("perfil-herr-input-gaveta").value
     });
     alert("✅ Ficha de la herramienta actualizada.");
 }
@@ -2299,7 +2446,7 @@ window.cargarListaLicencias = function() {
             colorBorde = "var(--verde-ok)";
         }
 
-        const fechaForm = lic.fechaSolicitud ? new Date(lic.fechaSolicitud).toLocaleDateString() : "No registrada";
+        const fechaForm = lic.fechaSolicitud ? fechaCL(lic.fechaSolicitud) : "No registrada";
 
         return `
         <div class="card-item" style="border-left: 4px solid ${colorBorde};">
@@ -2314,7 +2461,7 @@ window.cargarListaLicencias = function() {
             <div style="font-size: 0.85rem; color: var(--texto-gris); margin-bottom: 12px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 8px;">
                 <b>Motivo:</b> ${lic.motivo}
             </div>
-            <div style="font-size: 0.75rem; color: rgba(255,255,255,0.4); margin-bottom: 10px;">Solicitada el: ${fechaForm}</div>
+            <div style="font-size: 0.75rem; color: var(--texto-gris); margin-bottom: 10px;">Solicitada el: ${fechaForm}</div>
             
             <details style="margin-top: 5px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
                 <summary style="padding: 8px 12px; color: var(--texto-gris); font-size: 0.85rem; cursor: pointer; user-select: none; list-style: none;">
@@ -2380,7 +2527,7 @@ window.cargarListaOficiales = function() {
         <div class="glass-panel" onclick="abrirEditorOficial('${o.id}')" style="cursor: pointer; padding: 15px; border-radius: 12px; margin-bottom: 12px; border-left: 3px solid ${activo ? 'var(--dorado)' : 'var(--rojo-emergencia)'}; ${activo ? '' : 'opacity: 0.55;'}">
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
                 <div>
-                    <div style="color: white; font-weight: bold;">${o.nombre}</div>
+                    <div style="color: var(--texto-blanco); font-weight: bold;">${o.nombre}</div>
                     <div style="color: var(--dorado); font-size: 0.85rem; margin-top: 2px;">${o.cargo}${activo ? '' : ' · <span style="color: var(--rojo-emergencia);">Desactivado</span>'}</div>
                 </div>
                 <i class="fa-solid fa-chevron-right" style="color: var(--texto-gris);"></i>
@@ -2397,7 +2544,7 @@ function renderizarCheckboxPermisos(seleccionados) {
         ${CATALOGO_PERMISOS.filter(p => p.grupo === g).map(p => `
             <label class="checkbox-item" style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px;">
                 <input type="checkbox" class="chk-permiso-oficial" value="${p.key}" ${seleccionados.includes(p.key) ? 'checked' : ''} style="margin-top: 3px;">
-                <span><span style="color: white;">${p.label}</span>${p.desc ? `<br><span style="color: var(--texto-gris); font-size: 0.78rem;">${p.desc}</span>` : ''}</span>
+                <span><span style="color: var(--texto-blanco);">${p.label}</span>${p.desc ? `<br><span style="color: var(--texto-gris); font-size: 0.78rem;">${p.desc}</span>` : ''}</span>
             </label>`).join("")}
     `).join("");
 }
