@@ -2,7 +2,7 @@
 // 1. CONFIGURACIÓN DE BASE DE DATOS Y MODO OFFLINE (SIGO 7.0)
 // ==========================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, enableIndexedDbPersistence, collection, addDoc, getDocs, getDoc, updateDoc, deleteDoc, doc, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, enableIndexedDbPersistence, collection, addDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, doc, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCsmWPpVM8hy5N1B0Pmhe-GHO_FbZAGIDw",
@@ -40,6 +40,7 @@ const CATALOGO_PERMISOS = [
     { key: "material", grupo: "Material Mayor", label: "Ver Material Mayor", desc: "Ver unidades, gavetas y fichas de herramientas." },
     { key: "editar_material", grupo: "Material Mayor", label: "Editar inventario y unidades", desc: "Agregar, editar o eliminar herramientas, bitácora y estado de las unidades." },
     { key: "exportar", grupo: "Administración", label: "Exportar Reportes", desc: "" },
+    { key: "oficios", grupo: "Administración", label: "Archivo de Oficios", desc: "Ver, subir y eliminar oficios en PDF." },
     { key: "gestionar_oficiales", grupo: "Administración", label: "Gestión de Oficiales", desc: "Crear oficiales, asignar PIN y permisos." }
 ];
 
@@ -342,6 +343,7 @@ let MEMORIA_MAQUINAS = [];
 let MEMORIA_REPORTES = [];
 let MEMORIA_INVENTARIO = [];
 let MEMORIA_LICENCIAS = [];
+let MEMORIA_OFICIOS = [];
 
 let reporteTemporal = {
     actividad: "", direccion: "", fecha: null, esActividadInterna: false,
@@ -467,6 +469,12 @@ function conectarRadioEnTiempoReal() {
         if(document.getElementById('oficiales-vista') && document.getElementById('oficiales-vista').classList.contains('active')) cargarListaOficiales();
     });
 
+    // Solo se escuchan los datos de cada oficio; el PDF se descarga recién al abrirlo
+    onSnapshot(collection(dbCloud, "oficios"), (snapshot) => {
+        MEMORIA_OFICIOS = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (document.getElementById('oficios-vista') && document.getElementById('oficios-vista').classList.contains('active')) cargarListaOficios();
+    });
+
     onSnapshot(collection(dbCloud, "licencias"), (snapshot) => {
         MEMORIA_LICENCIAS = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
         if(document.getElementById('licencias-vista') && document.getElementById('licencias-vista').classList.contains('active')) {
@@ -499,6 +507,7 @@ window.switchView = function(viewId, element) {
     if (viewId === 'licencias-vista') cargarListaLicencias();
     if (viewId === 'oficiales-vista') cargarListaOficiales();
     if (viewId === 'solicitar-licencia') prepararFormLicencia();
+    if (viewId === 'oficios-vista') cargarListaOficios();
 }
 
 // Gestos táctiles: deslizar a la derecha abre el menú, a la izquierda lo cierra
@@ -2782,6 +2791,210 @@ window.eliminarOficial = async function() {
         await deleteDoc(doc(dbCloud, "oficiales", oficialEditandoId));
         cerrarModal("modal-oficial");
     } catch(e) {
+        alert("Error al eliminar. Revisa tu conexión.");
+    }
+}
+
+// ==========================================
+// ARCHIVO DE OFICIOS (PDF + ORD, MATERIA Y DESTINATARIO)
+// ==========================================
+// El PDF se guarda en Firestore dividido en partes (cada documento de Firestore admite ~1 MB).
+// Así no hace falta activar Firebase Storage ni un plan de pago.
+const OFICIO_TAMANO_MAXIMO = 10 * 1024 * 1024;   // 10 MB por PDF
+const OFICIO_TAMANO_PARTE = 700000;              // caracteres base64 por parte
+const URLS_PDF_CARGADOS = {};
+const OFICIOS_ABIERTOS = new Set();
+window.recordarOficioAbierto = (el) => el.open ? OFICIOS_ABIERTOS.add(el.dataset.id) : OFICIOS_ABIERTOS.delete(el.dataset.id);
+
+const escaparHTML = (t) => String(t ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const tamanoLegible = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+
+window.abrirFormOficio = function() {
+    if (!tienePermiso("oficios")) { alert("🔒 No tienes permiso para esta acción."); return; }
+    ["oficio-ord", "oficio-materia", "oficio-destinatario"].forEach(id => document.getElementById(id).value = "");
+    const hoy = new Date(); hoy.setMinutes(hoy.getMinutes() - hoy.getTimezoneOffset());
+    document.getElementById("oficio-fecha").value = hoy.toISOString().slice(0, 10);
+    document.getElementById("oficio-archivo").value = "";
+    document.getElementById("oficio-archivo-nombre").innerText = "Ningún archivo seleccionado";
+    document.getElementById("oficio-progreso").innerText = "";
+    document.getElementById("btn-abrir-oficio").style.display = "none";
+    document.getElementById("form-oficio").style.display = "block";
+    setTimeout(() => document.getElementById("oficio-ord").focus(), 50);
+}
+
+window.cerrarFormOficio = function() {
+    document.getElementById("form-oficio").style.display = "none";
+    document.getElementById("btn-abrir-oficio").style.display = "flex";
+}
+
+window.alElegirPdfOficio = function(input) {
+    const f = input.files[0];
+    document.getElementById("oficio-archivo-nombre").innerText = f ? `${f.name} · ${tamanoLegible(f.size)}` : "Ningún archivo seleccionado";
+}
+
+const leerComoBase64 = (archivo) => new Promise((resolve, reject) => {
+    const lector = new FileReader();
+    lector.onload = () => resolve(String(lector.result).split(",")[1] || "");
+    lector.onerror = () => reject(lector.error);
+    lector.readAsDataURL(archivo);
+});
+
+window.guardarOficio = async function() {
+    if (!tienePermiso("oficios")) { alert("🔒 No tienes permiso para esta acción."); return; }
+    const ord = document.getElementById("oficio-ord").value.trim();
+    const materia = document.getElementById("oficio-materia").value.trim();
+    const destinatario = document.getElementById("oficio-destinatario").value.trim();
+    const fecha = document.getElementById("oficio-fecha").value;
+    const archivo = document.getElementById("oficio-archivo").files[0];
+
+    if (!ord) { alert("Ingresa el N° de ORD."); return; }
+    if (!materia) { alert("Ingresa la materia del oficio."); return; }
+    if (!destinatario) { alert("Indica a quién va dirigido."); return; }
+    if (!archivo) { alert("Selecciona el PDF del oficio."); return; }
+    if (archivo.type !== "application/pdf" && !archivo.name.toLowerCase().endsWith(".pdf")) { alert("El archivo debe ser un PDF."); return; }
+    if (archivo.size > OFICIO_TAMANO_MAXIMO) { alert(`El PDF pesa ${tamanoLegible(archivo.size)}. El máximo es ${tamanoLegible(OFICIO_TAMANO_MAXIMO)}.`); return; }
+    if (MEMORIA_OFICIOS.some(o => (o.ord || "").trim().toLowerCase() === ord.toLowerCase()) &&
+        !confirm(`Ya existe un oficio con ORD "${ord}". ¿Guardarlo de todas formas?`)) return;
+
+    const progreso = document.getElementById("oficio-progreso");
+    const botones = document.querySelectorAll("#form-oficio button");
+    botones.forEach(b => b.disabled = true);
+    const id = `ofi_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    let partesSubidas = 0;
+    try {
+        progreso.innerText = "Leyendo PDF…";
+        const base64 = await leerComoBase64(archivo);
+        const partes = [];
+        for (let i = 0; i < base64.length; i += OFICIO_TAMANO_PARTE) partes.push(base64.slice(i, i + OFICIO_TAMANO_PARTE));
+
+        for (let i = 0; i < partes.length; i++) {
+            progreso.innerText = `Subiendo… ${Math.round((i / partes.length) * 100)}%`;
+            await setDoc(doc(dbCloud, "oficios_partes", `${id}_${i}`), { oficioId: id, indice: i, datos: partes[i] });
+            partesSubidas++;
+        }
+        const sesion = obtenerSesion();
+        await setDoc(doc(dbCloud, "oficios", id), {
+            ord, materia, destinatario, fecha,
+            nombreArchivo: archivo.name, tamano: archivo.size, partes: partes.length,
+            subidoPor: sesion ? `${sesion.cargo}${sesion.esMaestro ? "" : " " + sesion.nombre}` : "",
+            creado: Date.now()
+        });
+        progreso.innerText = "";
+        cerrarFormOficio();
+        alert(`✅ Oficio ORD ${ord} guardado.`);
+    } catch (e) {
+        console.error(e);
+        // Limpiar lo que alcanzó a subirse para no dejar partes huérfanas
+        for (let i = 0; i < partesSubidas; i++) { try { await deleteDoc(doc(dbCloud, "oficios_partes", `${id}_${i}`)); } catch (_) {} }
+        progreso.innerText = "";
+        alert("Error al subir el oficio. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+        botones.forEach(b => b.disabled = false);
+    }
+}
+
+window.cargarListaOficios = function() {
+    const cont = document.getElementById("lista-oficios");
+    if (!cont) return;
+    if (!tienePermiso("oficios")) { cont.innerHTML = ""; return; }
+
+    const filtro = (document.getElementById("buscar-oficio").value || "").trim().toLowerCase();
+    const lista = [...MEMORIA_OFICIOS]
+        .filter(o => !filtro || [o.ord, o.materia, o.destinatario].some(t => (t || "").toLowerCase().includes(filtro)))
+        .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || (b.creado || 0) - (a.creado || 0));
+
+    document.getElementById("oficios-contador").innerText = MEMORIA_OFICIOS.length === 0 ? "" :
+        (filtro ? `${lista.length} de ${MEMORIA_OFICIOS.length} oficios` : `${MEMORIA_OFICIOS.length} ${MEMORIA_OFICIOS.length === 1 ? "oficio" : "oficios"}`);
+
+    if (lista.length === 0) {
+        cont.innerHTML = `<p style="color: var(--texto-gris); text-align: center; margin-top: 20px;"><i class="fa-solid fa-folder-open"></i> ${MEMORIA_OFICIOS.length === 0 ? "Aún no hay oficios archivados." : "Ningún oficio coincide con la búsqueda."}</p>`;
+        return;
+    }
+
+    // Los recuadros desplegados siguen abiertos aunque la lista se redibuje (búsqueda, cambios en vivo)
+    cont.innerHTML = lista.map(o => `
+        <details class="oficio-item" data-id="${o.id}" ${OFICIOS_ABIERTOS.has(o.id) ? "open" : ""} ontoggle="recordarOficioAbierto(this)">
+            <summary>
+                <div class="oficio-resumen">
+                    <span class="oficio-ord">ORD ${escaparHTML(o.ord)}</span>
+                    <span class="oficio-materia">${escaparHTML(o.materia)}</span>
+                </div>
+                <span class="oficio-fecha">${o.fecha ? fechaCL(o.fecha + "T12:00:00") : ""}</span>
+                <i class="fa-solid fa-chevron-down oficio-flecha"></i>
+            </summary>
+            <div class="oficio-cuerpo">
+                <div class="oficio-dato"><span>Dirigido a</span><b>${escaparHTML(o.destinatario)}</b></div>
+                <div class="oficio-dato"><span>Fecha</span><b>${o.fecha ? fechaCL(o.fecha + "T12:00:00") : "—"}</b></div>
+                <div class="oficio-dato"><span>Archivo</span><b>${escaparHTML(o.nombreArchivo)} · ${tamanoLegible(o.tamano || 0)}</b></div>
+                ${o.subidoPor ? `<div class="oficio-dato"><span>Subido por</span><b>${escaparHTML(o.subidoPor)} · ${fechaCL(o.creado)}</b></div>` : ""}
+                <div class="oficio-acciones">
+                    <button class="btn-primary" onclick="verPdfOficio('${o.id}')"><i class="fa-solid fa-file-pdf"></i> Ver PDF</button>
+                    <button class="btn-secundary" onclick="descargarPdfOficio('${o.id}')"><i class="fa-solid fa-download"></i> Descargar</button>
+                </div>
+                <p class="oficio-estado" id="oficio-estado-${o.id}"></p>
+                <button class="btn-text oficio-eliminar" onclick="eliminarOficio('${o.id}')"><i class="fa-solid fa-trash"></i> Eliminar oficio</button>
+            </div>
+        </details>`).join("");
+}
+
+async function obtenerUrlPdfOficio(id) {
+    if (URLS_PDF_CARGADOS[id]) return URLS_PDF_CARGADOS[id];
+    const o = MEMORIA_OFICIOS.find(x => x.id === id);
+    if (!o) throw new Error("Oficio no encontrado");
+    const estado = document.getElementById(`oficio-estado-${id}`);
+    let base64 = "";
+    for (let i = 0; i < o.partes; i++) {
+        if (estado) estado.innerText = `Cargando PDF… ${Math.round((i / o.partes) * 100)}%`;
+        const parte = await getDoc(doc(dbCloud, "oficios_partes", `${id}_${i}`));
+        if (!parte.exists()) throw new Error("Falta una parte del PDF");
+        base64 += parte.data().datos;
+    }
+    if (estado) estado.innerText = "";
+    const binario = atob(base64);
+    const bytes = new Uint8Array(binario.length);
+    for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+    URLS_PDF_CARGADOS[id] = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    return URLS_PDF_CARGADOS[id];
+}
+
+window.verPdfOficio = async function(id) {
+    if (!tienePermiso("oficios")) { alert("🔒 No tienes permiso para esta acción."); return; }
+    // La pestaña se abre en el mismo toque, para que el teléfono no la bloquee como ventana emergente
+    const ventana = URLS_PDF_CARGADOS[id] ? null : window.open("", "_blank");
+    try {
+        const url = await obtenerUrlPdfOficio(id);
+        if (ventana) ventana.location.href = url; else window.open(url, "_blank");
+    } catch (e) {
+        if (ventana) ventana.close();
+        const estado = document.getElementById(`oficio-estado-${id}`);
+        if (estado) estado.innerText = "";
+        alert("No se pudo abrir el PDF. Revisa tu conexión.");
+    }
+}
+
+window.descargarPdfOficio = async function(id) {
+    if (!tienePermiso("oficios")) { alert("🔒 No tienes permiso para esta acción."); return; }
+    try {
+        const url = await obtenerUrlPdfOficio(id);
+        const o = MEMORIA_OFICIOS.find(x => x.id === id);
+        const enlace = document.createElement("a");
+        enlace.href = url;
+        enlace.download = `ORD ${(o.ord || "").replace(/[\\/:*?"<>|]/g, "-")} - ${(o.materia || "oficio").slice(0, 60).replace(/[\\/:*?"<>|]/g, "-")}.pdf`;
+        document.body.appendChild(enlace); enlace.click(); enlace.remove();
+    } catch (e) {
+        alert("No se pudo descargar el PDF. Revisa tu conexión.");
+    }
+}
+
+window.eliminarOficio = async function(id) {
+    if (!tienePermiso("oficios")) { alert("🔒 No tienes permiso para esta acción."); return; }
+    const o = MEMORIA_OFICIOS.find(x => x.id === id);
+    if (!o || !confirm(`¿Eliminar el oficio ORD ${o.ord}?\n\n"${o.materia}"\n\nSe borrará también el PDF y no se puede recuperar.`)) return;
+    try {
+        await deleteDoc(doc(dbCloud, "oficios", id));
+        for (let i = 0; i < (o.partes || 0); i++) await deleteDoc(doc(dbCloud, "oficios_partes", `${id}_${i}`));
+        if (URLS_PDF_CARGADOS[id]) { URL.revokeObjectURL(URLS_PDF_CARGADOS[id]); delete URLS_PDF_CARGADOS[id]; }
+    } catch (e) {
         alert("Error al eliminar. Revisa tu conexión.");
     }
 }

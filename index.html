@@ -114,6 +114,7 @@
             <li class="nav-item req-perm-personal" onclick="switchView('personal', this)"><i class="fa-solid fa-address-card"></i> Fichas de Personal</li>
             <li class="nav-item req-perm-material" onclick="switchView('inventario', this)"><i class="fa-solid fa-truck-fast"></i> Material Mayor</li>
             <li class="nav-item req-perm-exportar" onclick="switchView('exportacion', this)"><i class="fa-solid fa-file-excel"></i> Exportar Reportes</li>
+            <li class="nav-item req-perm-oficios" onclick="switchView('oficios-vista', this)"><i class="fa-solid fa-file-signature"></i> Archivo de Oficios</li>
             <li class="nav-item req-perm-gestionar_oficiales" onclick="switchView('oficiales-vista', this)"><i class="fa-solid fa-user-shield"></i> Gestión de Oficiales</li>
         </ul>
         <div class="selector-tema">
@@ -269,6 +270,57 @@
                     <i class="fa-solid fa-truck-fast"></i> Exportar Inventario de Unidades
                 </button>
             </div>
+        </section>
+
+        <section id="oficios-vista" class="view-section req-perm-oficios">
+            <div class="header-section">
+                <h2 class="title-header">Archivo de Oficios</h2>
+                <p style="color: var(--texto-gris); margin-top: 5px;">Copias firmadas de los oficios despachados, en PDF.</p>
+            </div>
+
+            <button id="btn-abrir-oficio" class="btn-primary" style="width: 100%; margin-bottom: 16px;" onclick="abrirFormOficio()"><i class="fa-solid fa-file-arrow-up"></i> Subir oficio</button>
+
+            <div id="form-oficio" class="form-glass glass-panel form-oficio" style="display: none;">
+                <div class="form-agregar-titulo">
+                    <span><i class="fa-solid fa-file-signature" style="color: var(--dorado);"></i> Nuevo oficio</span>
+                    <button class="btn-text" style="padding: 4px 6px; color: var(--texto-gris);" onclick="cerrarFormOficio()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="form-group oficio-fila">
+                    <div style="flex: 1;">
+                        <label>ORD N°</label>
+                        <input type="text" id="oficio-ord" class="input-glass" placeholder="Ej: 15/2026">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Fecha</label>
+                        <input type="date" id="oficio-fecha" class="input-glass">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Materia</label>
+                    <input type="text" id="oficio-materia" class="input-glass" placeholder="Ej: Solicita adquisición de DEA para unidad G-3">
+                </div>
+                <div class="form-group">
+                    <label>Dirigido a</label>
+                    <input type="text" id="oficio-destinatario" class="input-glass" placeholder="Ej: Comandante, copia Director">
+                </div>
+                <div class="form-group">
+                    <label>PDF del oficio</label>
+                    <label class="oficio-archivo">
+                        <input type="file" id="oficio-archivo" accept="application/pdf,.pdf" onchange="alElegirPdfOficio(this)">
+                        <i class="fa-solid fa-file-pdf"></i>
+                        <span id="oficio-archivo-nombre">Ningún archivo seleccionado</span>
+                        <em>Elegir</em>
+                    </label>
+                </div>
+                <button class="btn-primary" style="width: 100%;" onclick="guardarOficio()"><i class="fa-solid fa-floppy-disk"></i> Guardar oficio</button>
+                <p id="oficio-progreso" class="oficio-progreso"></p>
+            </div>
+
+            <div class="oficios-barra">
+                <input type="search" id="buscar-oficio" class="input-glass" placeholder="Buscar por ORD, materia o destinatario" oninput="cargarListaOficios()">
+                <span id="oficios-contador"></span>
+            </div>
+            <div id="lista-oficios" class="list-container"></div>
         </section>
 
         <section id="oficiales-vista" class="view-section req-perm-gestionar_oficiales">

@@ -840,3 +840,64 @@ body.modo-solo-licencia #banner-emergencia { display: none !important; }
 @media (max-width: 420px) {
     #solicitar-licencia input[type="date"] { padding-left: 10px; padding-right: 8px; font-size: 0.95rem; }
 }
+
+/* ========================================== */
+/* 19. ARCHIVO DE OFICIOS                     */
+/* ========================================== */
+.form-oficio { padding: 20px; border-radius: 15px; margin-bottom: 16px; animation: slideUp 0.25s; }
+.oficio-fila { display: flex; gap: 10px; }
+.oficio-fila > div { min-width: 0; }
+.oficio-fila input[type="date"] { min-width: 0; width: 100%; }
+.oficio-archivo {
+    display: flex !important; align-items: center; gap: 10px; margin: 0 !important; cursor: pointer;
+    padding: 14px 16px; border-radius: 14px; border: 1px dashed rgba(255,255,255,0.25); background: rgba(0,0,0,0.25);
+}
+.oficio-archivo input { display: none; }
+.oficio-archivo i { color: #ff6b6b; font-size: 1.3rem; }
+.oficio-archivo span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--texto-gris); font-size: 0.9rem; }
+.oficio-archivo em { font-style: normal; font-weight: 700; color: var(--dorado); font-size: 0.9rem; }
+.oficio-progreso { text-align: center; color: var(--dorado); font-size: 0.9rem; margin-top: 10px; min-height: 1em; }
+
+.oficios-barra { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.oficios-barra input { flex: 1; }
+.oficios-barra span { color: var(--texto-gris); font-size: 0.8rem; white-space: nowrap; }
+
+.oficio-item {
+    border-radius: 16px; overflow: hidden;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.01));
+    border: 1px solid rgba(255, 255, 255, 0.06); border-left: 3px solid var(--dorado);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+.oficio-item summary { display: flex; align-items: center; gap: 12px; padding: 16px; cursor: pointer; list-style: none; user-select: none; }
+.oficio-item summary::-webkit-details-marker { display: none; }
+.oficio-resumen { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.oficio-ord { color: var(--dorado); font-weight: 800; font-size: 0.85rem; letter-spacing: 0.5px; }
+.oficio-materia { color: var(--texto-blanco); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oficio-item[open] .oficio-materia { white-space: normal; }
+.oficio-fecha { color: var(--texto-gris); font-size: 0.8rem; white-space: nowrap; }
+.oficio-flecha { color: var(--texto-gris); transition: transform 0.2s; }
+.oficio-item[open] .oficio-flecha { transform: rotate(180deg); }
+.oficio-cuerpo { padding: 0 16px 16px; border-top: 1px solid rgba(255,255,255,0.08); }
+.oficio-dato { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.oficio-dato span { color: var(--texto-gris); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; }
+.oficio-dato b { color: var(--texto-blanco); font-weight: 600; word-break: break-word; }
+.oficio-acciones { display: flex; gap: 10px; margin-top: 14px; }
+.oficio-acciones button { flex: 1; padding: 12px 10px; font-size: 0.95rem; }
+.oficio-estado { text-align: center; color: var(--dorado); font-size: 0.85rem; margin-top: 8px; min-height: 0; }
+.oficio-eliminar { color: var(--rojo-emergencia) !important; display: block; margin: 8px auto 0; font-size: 0.85rem; }
+
+@media (max-width: 768px) { .oficio-item { background: rgba(13, 38, 89, 0.6); } }
+
+html.tema-grafito .oficio-item { background: var(--g-superficie); border-color: var(--g-borde); border-left-color: var(--dorado); box-shadow: var(--g-sombra); }
+html.tema-grafito .oficio-cuerpo { border-top-color: var(--g-borde); }
+html.tema-grafito .oficio-archivo { background: var(--g-hundido); border-color: var(--g-borde-fuerte); }
+html.tema-claro .oficio-item { background: var(--c-superficie); border-color: var(--c-borde); border-left: 3px solid var(--c-azul); box-shadow: var(--c-sombra); }
+html.tema-claro .oficio-ord { color: var(--c-azul); }
+html.tema-claro .oficio-cuerpo { border-top-color: var(--c-borde); }
+html.tema-claro .oficio-dato { border-bottom-color: var(--c-borde); }
+html.tema-claro .oficio-archivo { background: var(--c-suave); border-color: var(--c-borde-fuerte); }
+html.tema-claro .oficio-archivo em { color: var(--c-azul); }
+@media (max-width: 768px) {
+    html.tema-grafito .oficio-item { background: var(--g-superficie); }
+    html.tema-claro .oficio-item { background: var(--c-superficie); }
+}
