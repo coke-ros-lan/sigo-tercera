@@ -328,6 +328,12 @@
                 <h2 class="title-header">Gestión de Oficiales</h2>
                 <p style="color: var(--texto-gris); margin-top: 5px;">Crea el perfil de cada oficial, asígnale su PIN personal de 5 dígitos y define a qué puede acceder.</p>
             </div>
+            <div id="aviso-migracion" class="glass-panel" style="display: none; padding: 18px; border-radius: 16px; margin-bottom: 16px;">
+                <div style="font-weight: 700; color: var(--texto-blanco); margin-bottom: 6px;"><i class="fa-solid fa-shield-halved" style="color: var(--dorado);"></i> Falta pasar los PIN a cuentas seguras</div>
+                <p style="color: var(--texto-gris); font-size: 0.9rem; margin-bottom: 14px;">Hazlo una sola vez. Cada oficial seguirá entrando con su mismo PIN, pero los PIN dejarán de estar guardados en la base de datos.</p>
+                <button id="btn-migrar" class="btn-primary" style="width: 100%;" onclick="migrarOficiales()"><i class="fa-solid fa-arrows-rotate"></i> Migrar oficiales</button>
+                <p id="txt-migracion" style="color: var(--dorado); font-size: 0.85rem; text-align: center; margin-top: 10px; min-height: 1em;"></p>
+            </div>
             <button class="btn-primary" style="width: 100%; margin-bottom: 20px;" onclick="abrirEditorOficial()"><i class="fa-solid fa-user-plus"></i> Nuevo Oficial</button>
             <div id="lista-oficiales" class="list-container"></div>
         </section>
@@ -408,6 +414,7 @@
 
                 <div id="paso-3" class="step">
                     <div class="info-box" style="margin-bottom: 15px;"><p id="txt-resumen-servicio" style="font-size: 0.9rem; text-align: center; color: var(--texto-blanco);"></p></div>
+                    <button class="btn-text" style="display: block; margin: 0 auto 12px auto; font-size: 0.9rem;" onclick="abrirCopiarAsistencia('lista-asistencia')"><i class="fa-solid fa-copy"></i> Copiar asistencia de otro servicio</button>
                     <div id="lista-asistencia" class="lista-asistencia-grid"></div>
                     <div class="modal-footer-spacing" style="display: flex; gap: 10px; margin-top: 20px;">
                         <button class="btn-secundary" style="flex: 1;" onclick="volverPaso2()"><i class="fa-solid fa-arrow-left"></i> Volver</button>
@@ -511,7 +518,10 @@
                         <input type="text" id="edit-otras-maquinas" class="input-glass" placeholder="Otro carro externo (Ej: K-1)" style="font-size: 0.85rem; padding: 8px 12px;">
                     </div>
                 </details>
-                <h3 style="color: var(--dorado); margin: 20px 0 10px 0; font-size: 1.1rem; border-bottom: 1px solid var(--borde-translucido); padding-bottom: 5px;">Modificar Asistencia</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 20px 0 10px 0; border-bottom: 1px solid var(--borde-translucido); padding-bottom: 5px;">
+                    <h3 style="color: var(--dorado); font-size: 1.1rem;">Modificar Asistencia</h3>
+                    <button class="btn-text" style="font-size: 0.85rem;" onclick="abrirCopiarAsistencia('edit-lista-asistencia')"><i class="fa-solid fa-copy"></i> Copiar de otro</button>
+                </div>
                 <div id="edit-lista-asistencia" class="lista-asistencia-grid" style="max-height: 250px; overflow-y: auto; padding-right: 5px; margin-bottom: 15px;"></div>
                 <div class="modal-footer-spacing">
                     <button class="btn-primary" style="width: 100%; margin-top: 15px;" onclick="guardarEdicionReporte()"><i class="fa-solid fa-floppy-disk"></i> Guardar Cambios</button>
@@ -625,11 +635,11 @@
                 <span class="close-btn" onclick="cerrarModal('modal-oficial')"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div class="modal-body">
-                <div class="form-group">
+                <div class="form-group solo-oficial-normal">
                     <label>Voluntario</label>
                     <select id="oficial-nombre" class="input-glass" onchange="alElegirVoluntarioOficial()"></select>
                 </div>
-                <div class="form-group">
+                <div class="form-group solo-oficial-normal">
                     <label>Cargo</label>
                     <input type="text" id="oficial-cargo" class="input-glass" placeholder="Ej: Capitán, Teniente 1°, Secretaria">
                 </div>
@@ -639,6 +649,7 @@
                         <input type="text" inputmode="numeric" maxlength="5" id="oficial-pin" class="input-glass" placeholder="•••••" style="flex: 1;">
                         <button class="btn-secundary" style="white-space: nowrap;" onclick="generarPinOficial()"><i class="fa-solid fa-dice"></i> Generar</button>
                     </div>
+                    <p id="oficial-pin-ayuda" style="color: var(--texto-gris); font-size: 0.8rem; margin-top: 8px;"></p>
                 </div>
                 <div class="form-group" id="contenedor-oficial-activo" style="display: none;">
                     <label class="checkbox-item">
@@ -646,14 +657,14 @@
                     </label>
                 </div>
 
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                <div class="solo-oficial-normal" style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
                     <h3 style="color: var(--dorado);">Permisos</h3>
                     <div style="display: flex; gap: 12px;">
                         <button class="btn-text" style="font-size: 0.8rem;" onclick="marcarTodosPermisosOficial(true)">Todos</button>
                         <button class="btn-text" style="font-size: 0.8rem;" onclick="marcarTodosPermisosOficial(false)">Ninguno</button>
                     </div>
                 </div>
-                <div id="oficial-permisos"></div>
+                <div id="oficial-permisos" class="solo-oficial-normal"></div>
 
                 <button class="btn-primary" style="width: 100%; margin-top: 20px;" onclick="guardarOficial()"><i class="fa-solid fa-floppy-disk"></i> Guardar Oficial</button>
                 <button id="btn-eliminar-oficial" class="btn-text" style="color: var(--rojo-emergencia); margin-top: 15px; width: 100%; text-align: center; display: none;" onclick="eliminarOficial()"><i class="fa-solid fa-trash"></i> Eliminar Perfil de Oficial</button>
@@ -824,6 +835,20 @@
         }
     </script>
     <script type="module" src="app.js"></script>
+
+    <div id="modal-copiar-asistencia" class="modal">
+        <div class="modal-content glass-panel" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Copiar Asistencia</h2>
+                <span class="close-btn" onclick="cerrarModal('modal-copiar-asistencia')"><i class="fa-solid fa-xmark"></i></span>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--texto-gris); font-size: 0.9rem; margin-bottom: 12px;">Elige el servicio del que quieres copiar la lista. Podrás revisarla y corregirla antes de guardar.</p>
+                <input type="text" id="buscar-copiar-asistencia" class="input-glass" placeholder="Buscar por clave, actividad o dirección" oninput="renderListaCopiarAsistencia()" style="margin-bottom: 12px;">
+                <div id="lista-copiar-asistencia" style="display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; padding-right: 4px;"></div>
+            </div>
+        </div>
+    </div>
 
 </body>
 </html>

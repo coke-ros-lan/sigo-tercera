@@ -2,7 +2,8 @@
 // 1. CONFIGURACIÓN DE BASE DE DATOS Y MODO OFFLINE (SIGO 7.0)
 // ==========================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, enableIndexedDbPersistence, collection, addDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, doc, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, enableIndexedDbPersistence, collection, addDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, deleteField, arrayUnion, doc, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCsmWPpVM8hy5N1B0Pmhe-GHO_FbZAGIDw",
@@ -52,13 +53,35 @@ const CATALOGO_PERMISOS = [
     document.head.appendChild(tag);
 })();
 
+// ==========================================
+// AUTENTICACIÓN CON FIREBASE (el PIN es la llave de una cuenta)
+// ==========================================
+// Cada PIN corresponde a una cuenta de Firebase Authentication. El correo y la contraseña
+// se calculan a partir del PIN dentro de la app: nadie tiene que verlos ni recordarlos.
+// Así Firebase valida el PIN (y bloquea intentos repetidos) y las reglas saben quién está conectado.
+const authCloud = getAuth(app);
+let appCuentas = null;   // app secundaria para crear cuentas sin cerrar la sesión de quien administra
+
+async function correoDePin(pin) {
+    // El correo no lleva el PIN a la vista: se usa un resumen (hash) para que no aparezca en la consola
+    const datos = new TextEncoder().encode(`sigo-tercera:${pin}`);
+    const hash = await crypto.subtle.digest("SHA-256", datos);
+    const hex = [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 20);
+    return `oficial-${hex}@sigo-tercera.app`;
+}
+const claveDePin = (pin) => `SIGO3ra-${pin}`;
+
+const esperarAuthInicial = () => new Promise(resolve => {
+    const detener = onAuthStateChanged(authCloud, (usuario) => { detener(); resolve(usuario); });
+});
+
 function obtenerSesion() {
     const exp = localStorage.getItem("sigo_oficial_exp");
     if (!exp || Date.now() > parseInt(exp)) return null;
     try {
         const s = JSON.parse(localStorage.getItem("sigo_sesion") || "null");
-        // Sesiones antiguas (solo PIN maestro) sin datos guardados se tratan como Ayudante maestro
-        return s || { esMaestro: true, nombre: "Ayudante", cargo: "Ayudante", permisos: [] };
+        // Sesiones antiguas (solo PIN maestro, antes de la migración) se tratan como Ayudante maestro
+        return s || { legado: true, esMaestro: true, nombre: "Ayudante", cargo: "Ayudante", permisos: [] };
     } catch(e) { return null; }
 }
 
@@ -70,9 +93,62 @@ function tienePermiso(key) {
 }
 window.tienePermiso = tienePermiso;
 
-function cerrarSesionOficial() {
+async function cerrarSesionOficial() {
     localStorage.removeItem("sigo_oficial_exp");
     localStorage.removeItem("sigo_sesion");
+    try { await signOut(authCloud); } catch (e) {}
+}
+
+// Devuelve el uid de la cuenta de un PIN, creándola si no existe. No toca la sesión actual.
+async function uidParaPin(pin) {
+    if (!appCuentas) appCuentas = initializeApp(firebaseConfig, "sigo-cuentas");
+    const authCuentas = getAuth(appCuentas);
+    const correo = await correoDePin(pin), clave = claveDePin(pin);
+    try {
+        const c = await createUserWithEmailAndPassword(authCuentas, correo, clave);
+        return c.user.uid;
+    } catch (e) {
+        if (e.code !== "auth/email-already-in-use") throw e;
+        const c = await signInWithEmailAndPassword(authCuentas, correo, clave);
+        return c.user.uid;
+    } finally {
+        try { await signOut(authCuentas); } catch (_) {}
+    }
+}
+
+// Inicia sesión con la cuenta del PIN. Devuelve los datos de sesión o null si el PIN no corresponde a un oficial activo.
+async function iniciarSesionConCuenta(pin) {
+    let cred;
+    try {
+        cred = await signInWithEmailAndPassword(authCloud, await correoDePin(pin), claveDePin(pin));
+    } catch (e) {
+        if (["auth/invalid-credential", "auth/user-not-found", "auth/wrong-password", "auth/invalid-email", "auth/operation-not-allowed", "auth/invalid-login-credentials"].includes(e.code)) return null;
+        throw e;
+    }
+    let perfil = null;
+    try { perfil = await getDoc(doc(dbCloud, "oficiales", cred.user.uid)); } catch (e) {}
+    if (!perfil || !perfil.exists() || perfil.data().activo === false) { await signOut(authCloud); return null; }
+    const o = perfil.data();
+    return { uid: cred.user.uid, id: cred.user.uid, esMaestro: o.maestro === true, nombre: o.nombre, cargo: o.cargo, permisos: o.permisos || [] };
+}
+
+// Solo sirve antes de migrar: compara contra los PIN que todavía estén guardados en la base.
+async function iniciarSesionLegado(pin) {
+    try {
+        const cfg = await getDoc(doc(dbCloud, "configuracion", "admin"));
+        if (cfg.exists() && cfg.data().pin && cfg.data().pin === pin) {
+            return { legado: true, esMaestro: true, nombre: "Ayudante", cargo: "Ayudante", permisos: [] };
+        }
+        const snap = await getDocs(collection(dbCloud, "oficiales"));
+        const o = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(x => x.pin && x.pin === pin && x.activo !== false);
+        if (o) return { legado: true, esMaestro: false, id: o.id, nombre: o.nombre, cargo: o.cargo, permisos: o.permisos || [] };
+    } catch (e) { /* Con las reglas nuevas esto ya no se puede leer: la migración está hecha */ }
+    return null;
+}
+
+function guardarSesion(sesion) {
+    localStorage.setItem("sigo_oficial_exp", Date.now() + (30 * 60 * 1000));
+    localStorage.setItem("sigo_sesion", JSON.stringify(sesion));
 }
 
 function aplicarPermisos() {
@@ -118,10 +194,10 @@ function aplicarPermisos() {
     }
 }
 
-setInterval(() => {
+setInterval(async () => {
     const exp = localStorage.getItem("sigo_oficial_exp");
     if (exp && Date.now() > parseInt(exp)) {
-        cerrarSesionOficial();
+        await cerrarSesionOficial();
         aplicarPermisos();
         alert("🔒 La sesión de oficial ha caducado por inactividad (30 minutos).");
         location.reload();
@@ -133,9 +209,7 @@ window.abrirPadAdmin = function() {
     if (sesion) {
         const quien = sesion.esMaestro ? "Ayudante" : sesion.nombre;
         if(confirm(`Sesión activa: ${quien}.\n¿Cerrar la sesión y volver a Voluntario?`)) {
-            cerrarSesionOficial();
-            aplicarPermisos();
-            location.reload();
+            cerrarSesionOficial().then(() => location.reload());
         }
         return;
     }
@@ -173,35 +247,27 @@ function actualizarAdminDots() {
     });
 }
 
-// VERIFICACIÓN DE PIN: PIN maestro de Ayudante o PIN personal de cada oficial
+// VERIFICACIÓN DE PIN: primero contra las cuentas de Firebase; si aún no se migra, contra los PIN guardados
 async function verificarAdminPin() {
     const pin = pinAdminIngresado;
     try {
-        const docSnap = await getDoc(doc(dbCloud, "configuracion", "admin"));
-        let sesion = null;
-
-        if (docSnap.exists() && docSnap.data().pin === pin) {
-            sesion = { esMaestro: true, nombre: "Ayudante", cargo: "Ayudante", permisos: [] };
-        } else {
-            const snap = await getDocs(collection(dbCloud, "oficiales"));
-            const oficial = snap.docs.map(d => ({ id: d.id, ...d.data() })).find(o => o.pin === pin && o.activo !== false);
-            if (oficial) {
-                sesion = { esMaestro: false, id: oficial.id, nombre: oficial.nombre, cargo: oficial.cargo, permisos: oficial.permisos || [] };
-            }
-        }
-
+        const sesion = (await iniciarSesionConCuenta(pin)) || (await iniciarSesionLegado(pin));
         if (sesion) {
-            localStorage.setItem("sigo_oficial_exp", Date.now() + (30 * 60 * 1000));
-            localStorage.setItem("sigo_sesion", JSON.stringify(sesion));
+            guardarSesion(sesion);
             cerrarPadAdmin();
             aplicarPermisos();
+            suscribirColeccionesProtegidas();
             const quien = sesion.esMaestro ? "Modo Ayudante" : `Bienvenido/a ${sesion.cargo} ${sesion.nombre.split(" ")[0]}`;
             alert(`✅ ${quien}. Sesión activa por 30 minutos.`);
         } else {
             falloPin();
         }
     } catch(e) {
-        alert("Error de conexión al verificar el PIN.");
+        if (e && e.code === "auth/too-many-requests") {
+            alert("🔒 Demasiados intentos fallidos. Por seguridad, espera unos minutos antes de volver a intentar.");
+        } else {
+            alert("Error de conexión al verificar el PIN.");
+        }
         falloPin();
     }
 }
@@ -326,7 +392,8 @@ const DatosClaves = {
         { nombre: "Eduardo Eliseo Olavarria Fischer", cargo: "Bombero Compañía" },
         { nombre: "Eduardo Alejandro Lepiqueo Levinao", cargo: "Bombero Compañía" },
         { nombre: "Luis Jesus Hidalgo Piutrin", cargo: "Bombero Compañía" },
-        { nombre: "Juan Pablo Valenzuela Toledo", cargo: "Bombero Compañía" }
+        { nombre: "Juan Pablo Valenzuela Toledo", cargo: "Bombero Compañía" },
+        { nombre: "Augusto Rapiman Cayumil", cargo: "Bombero Compañía" }
     ]
 };
 
@@ -357,9 +424,16 @@ async function iniciarSistema() {
     const subMenu = document.querySelector(".subtitle-menu");
     if(subMenu) subMenu.innerText = "SIGO Build 7.0";
 
+    // Esperar a que Firebase confirme si hay una cuenta conectada, y cuadrarla con la sesión de 30 minutos
+    const usuario = await esperarAuthInicial();
+    const sesion = obtenerSesion();
+    if (usuario && (!sesion || sesion.uid !== usuario.uid)) await signOut(authCloud);
+    if (sesion && sesion.uid && !usuario) { localStorage.removeItem("sigo_oficial_exp"); localStorage.removeItem("sigo_sesion"); }
+
     aplicarPermisos();
     await inicializarDatosEnNube();
-    conectarRadioEnTiempoReal(); 
+    conectarRadioEnTiempoReal();
+    suscribirColeccionesProtegidas();
 
     if (new URLSearchParams(window.location.search).get("licencia") === "1") {
         abrirModalLicenciaDirecto();
@@ -392,9 +466,11 @@ async function inicializarDatosEnNube() {
         if (!maquinasGuardadas.includes("BX-3")) await addDoc(collection(dbCloud, "maquinas"), { nomenclatura: "BX-3", estado: "Operativo" });
         if (!maquinasGuardadas.includes("G-3")) await addDoc(collection(dbCloud, "maquinas"), { nomenclatura: "G-3", estado: "Operativo" });
 
+        // Agrega a la nube a quien esté en la nómina y todavía no exista (voluntarios nuevos)
         const bomberosSnap = await getDocs(collection(dbCloud, "bomberos"));
-        if (bomberosSnap.empty) {
-            for (let b of DatosClaves.nominaOficial) {
+        const nombresGuardados = bomberosSnap.docs.map(d => d.data().nombre);
+        for (let b of DatosClaves.nominaOficial) {
+            if (!nombresGuardados.includes(b.nombre)) {
                 await addDoc(collection(dbCloud, "bomberos"), { nombre: b.nombre, cargo: b.cargo, grado: "Voluntario" });
             }
         }
@@ -423,6 +499,11 @@ function conectarRadioEnTiempoReal() {
     onSnapshot(collection(dbCloud, "bomberos"), (snapshot) => {
         let todos = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         MEMORIA_BOMBEROS = [...new Map(todos.map(b => [b.nombre, b])).values()];
+        if (MEMORIA_BOMBEROS.length > 0) {
+            DatosClaves.nominaOficial.forEach(n => {
+                if (!MEMORIA_BOMBEROS.some(b => b.nombre === n.nombre)) MEMORIA_BOMBEROS.push({ nombre: n.nombre, cargo: n.cargo, grado: "Voluntario" });
+            });
+        }
         MEMORIA_BOMBEROS.sort((a, b) => {
             const indexA = DatosClaves.nominaOficial.findIndex(bom => bom.nombre === a.nombre);
             const indexB = DatosClaves.nominaOficial.findIndex(bom => bom.nombre === b.nombre);
@@ -432,55 +513,84 @@ function conectarRadioEnTiempoReal() {
         if(document.getElementById('solicitar-licencia').classList.contains('active')) prepararFormLicencia();
     });
 
-    onSnapshot(collection(dbCloud, "inventario"), (snapshot) => {
-        MEMORIA_INVENTARIO = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
-        if(document.getElementById('modal-detalle-maquina').style.display === "block" && maquinaEditandoId) {
-            const esOficial = tienePermiso("editar_material");
-            renderizarItemsMaquina(maquinaEditandoId, esOficial);
-        }
-    });
+}
 
-    onSnapshot(collection(dbCloud, "oficiales"), (snapshot) => {
-        MEMORIA_OFICIALES = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        MEMORIA_OFICIALES.sort((a, b) => {
-            const iA = DatosClaves.nominaOficial.findIndex(bom => bom.nombre === a.nombre);
-            const iB = DatosClaves.nominaOficial.findIndex(bom => bom.nombre === b.nombre);
-            return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
-        });
+// Colecciones que solo pueden leer los oficiales con permiso. Se vuelven a suscribir al iniciar o
+// cerrar sesión, o cuando cambian los permisos, para no pedirle a Firebase datos que va a negar.
+let SUSCRIPCIONES_PROTEGIDAS = [];
+let INVENTARIO_CARGADO = false;
+const avisarError = (nombre) => (e) => console.warn(`Sin acceso a ${nombre}:`, e && e.code);
 
-        // Si hay un oficial con sesión abierta, sus permisos se actualizan al instante
-        const sesion = obtenerSesion();
-        if (sesion && !sesion.esMaestro && sesion.id) {
-            const actual = MEMORIA_OFICIALES.find(o => o.id === sesion.id);
-            if (!actual || actual.activo === false) {
-                cerrarSesionOficial();
+function suscribirColeccionesProtegidas() {
+    SUSCRIPCIONES_PROTEGIDAS.forEach(cancelar => { try { cancelar(); } catch (_) {} });
+    SUSCRIPCIONES_PROTEGIDAS = [];
+    MEMORIA_INVENTARIO = []; MEMORIA_OFICIOS = []; MEMORIA_LICENCIAS = []; MEMORIA_OFICIALES = [];
+    INVENTARIO_CARGADO = false;
+    const sesion = obtenerSesion();
+    if (!sesion) return;
+    const s = (cancelar) => SUSCRIPCIONES_PROTEGIDAS.push(cancelar);
+
+    if (tienePermiso("material") || tienePermiso("editar_material") || tienePermiso("exportar")) {
+        s(onSnapshot(collection(dbCloud, "inventario"), (snapshot) => {
+            MEMORIA_INVENTARIO = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
+            INVENTARIO_CARGADO = true;
+            if(document.getElementById('modal-detalle-maquina').style.display === "block" && maquinaEditandoId) {
+                renderizarItemsMaquina(maquinaEditandoId, tienePermiso("editar_material"));
+            }
+        }, avisarError("inventario")));
+    }
+
+    if (tienePermiso("oficios")) {
+        // Solo se escuchan los datos de cada oficio; el PDF se descarga recién al abrirlo
+        s(onSnapshot(collection(dbCloud, "oficios"), (snapshot) => {
+            MEMORIA_OFICIOS = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            if (document.getElementById('oficios-vista').classList.contains('active')) cargarListaOficios();
+        }, avisarError("oficios")));
+    }
+
+    if (tienePermiso("licencias") || tienePermiso("crear_servicios") || tienePermiso("editar_servicios")) {
+        s(onSnapshot(collection(dbCloud, "licencias"), (snapshot) => {
+            MEMORIA_LICENCIAS = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
+            if(document.getElementById('licencias-vista').classList.contains('active')) cargarListaLicencias();
+        }, avisarError("licencias")));
+    }
+
+    if (tienePermiso("gestionar_oficiales")) {
+        s(onSnapshot(collection(dbCloud, "oficiales"), (snapshot) => {
+            MEMORIA_OFICIALES = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            MEMORIA_OFICIALES.sort((a, b) => {
+                if (a.maestro !== b.maestro) return a.maestro ? -1 : 1;
+                const iA = DatosClaves.nominaOficial.findIndex(bom => bom.nombre === a.nombre);
+                const iB = DatosClaves.nominaOficial.findIndex(bom => bom.nombre === b.nombre);
+                return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
+            });
+            if(document.getElementById('oficiales-vista').classList.contains('active')) cargarListaOficiales();
+        }, avisarError("oficiales")));
+    }
+
+    // El perfil propio: si cambian los permisos se aplican al instante; si lo desactivan, se cierra la sesión
+    if (sesion.id) {
+        s(onSnapshot(doc(dbCloud, "oficiales", sesion.id), async (perfil) => {
+            const actual = obtenerSesion();
+            if (!actual || actual.id !== sesion.id) return;
+            if (!perfil.exists() || perfil.data().activo === false) {
+                await cerrarSesionOficial();
                 alert("🔒 Tu perfil de oficial fue desactivado o eliminado. Se cerró la sesión.");
                 location.reload();
                 return;
             }
-            const permisosAntes = JSON.stringify(sesion.permisos || []);
-            sesion.permisos = actual.permisos || [];
-            sesion.cargo = actual.cargo;
-            sesion.nombre = actual.nombre;
-            localStorage.setItem("sigo_sesion", JSON.stringify(sesion));
-            if (permisosAntes !== JSON.stringify(sesion.permisos)) aplicarPermisos();
-        }
-
-        if(document.getElementById('oficiales-vista') && document.getElementById('oficiales-vista').classList.contains('active')) cargarListaOficiales();
-    });
-
-    // Solo se escuchan los datos de cada oficio; el PDF se descarga recién al abrirlo
-    onSnapshot(collection(dbCloud, "oficios"), (snapshot) => {
-        MEMORIA_OFICIOS = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        if (document.getElementById('oficios-vista') && document.getElementById('oficios-vista').classList.contains('active')) cargarListaOficios();
-    });
-
-    onSnapshot(collection(dbCloud, "licencias"), (snapshot) => {
-        MEMORIA_LICENCIAS = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
-        if(document.getElementById('licencias-vista') && document.getElementById('licencias-vista').classList.contains('active')) {
-            cargarListaLicencias();
-        }
-    });
+            const o = perfil.data();
+            const antes = JSON.stringify([actual.permisos || [], !!actual.esMaestro]);
+            actual.permisos = o.permisos || [];
+            actual.esMaestro = o.maestro === true;
+            actual.cargo = o.cargo; actual.nombre = o.nombre;
+            localStorage.setItem("sigo_sesion", JSON.stringify(actual));
+            if (antes !== JSON.stringify([actual.permisos, actual.esMaestro])) {
+                aplicarPermisos();
+                suscribirColeccionesProtegidas();
+            }
+        }, avisarError("perfil")));
+    }
 }
 
 // ==========================================
@@ -828,6 +938,74 @@ window.irPaso3 = function() {
     document.getElementById("lista-asistencia").innerHTML = html;
 }
 
+// ==========================================
+// COPIAR ASISTENCIA DE OTRO SERVICIO
+// ==========================================
+let destinoCopiaAsistencia = null;
+
+window.abrirCopiarAsistencia = function(contenedorId) {
+    destinoCopiaAsistencia = contenedorId;
+    document.getElementById("buscar-copiar-asistencia").value = "";
+    renderListaCopiarAsistencia();
+    abrirModal("modal-copiar-asistencia");
+}
+
+window.renderListaCopiarAsistencia = function() {
+    const texto = document.getElementById("buscar-copiar-asistencia").value.trim().toLowerCase();
+    const excluir = destinoCopiaAsistencia === "edit-lista-asistencia" ? reporteEditandoId : null;
+    const lista = MEMORIA_REPORTES
+        .filter(r => r.id !== excluir)
+        .filter(r => (r.asistentesNombres || []).length + (r.licenciasNombres || []).length > 0)
+        .filter(r => !texto || `${r.actividad || ""} ${r.claveFinal || ""} ${r.direccion || ""}`.toLowerCase().includes(texto))
+        .slice(0, 40);
+
+    const cont = document.getElementById("lista-copiar-asistencia");
+    if (lista.length === 0) {
+        cont.innerHTML = `<p style="color: var(--texto-gris); text-align: center; padding: 20px 0;">No hay servicios con asistencia para copiar.</p>`;
+        return;
+    }
+    cont.innerHTML = lista.map(r => {
+        const n = (r.asistentesNombres || []).length;
+        const lic = (r.licenciasNombres || []).length;
+        return `<div class="bombero-card" style="cursor: pointer;" onclick="copiarAsistenciaDe('${r.id}')">
+                    <div class="bombero-info" style="display: flex; flex-direction: column; gap: 4px;">
+                        <span class="bombero-nombre">${r.claveFinal || r.actividad}</span>
+                        <span class="bombero-cargo">${fechaCL(r.fecha)} · ${horaCL(r.fecha)}${r.direccion ? " · " + r.direccion : ""}</span>
+                        <span class="bombero-cargo" style="color: var(--dorado);"><i class="fa-solid fa-user-check"></i> ${n} asistente${n === 1 ? "" : "s"}${lic ? ` · ${lic} con licencia` : ""}</span>
+                    </div>
+                </div>`;
+    }).join('');
+}
+
+window.copiarAsistenciaDe = function(id) {
+    const origen = MEMORIA_REPORTES.find(r => r.id === id);
+    const cont = document.getElementById(destinoCopiaAsistencia);
+    if (!origen || !cont) return;
+    const asistentes = origen.asistentesNombres || [];
+    const licencias = origen.licenciasNombres || [];
+    let copiados = 0;
+
+    cont.querySelectorAll(".bombero-card").forEach(card => {
+        const nombre = card.getAttribute("data-nombre");
+        const botones = [...card.querySelectorAll(".segment-btn")];
+        const boton = (val) => botones.find(b => b.getAttribute("data-val") === val);
+        const positivo = boton("Asiste") || boton("Participó");
+        const actual = card.querySelector(".segment-btn.active");
+
+        let elegido;
+        if (asistentes.includes(nombre)) { elegido = positivo; copiados++; }
+        else if (licencias.includes(nombre) && boton("Licencia")) elegido = boton("Licencia");
+        else if (actual && actual.getAttribute("data-val") === "Licencia") elegido = actual;   // licencia vigente ya marcada
+        else elegido = botones[0];   // Falta / No Asistió / No Participó
+
+        if (elegido) cambiarEstadoAsistencia(elegido, elegido.getAttribute("data-val"));
+    });
+
+    cerrarModal("modal-copiar-asistencia");
+    const fuera = asistentes.filter(nom => !cont.querySelector(`.bombero-card[data-nombre="${CSS.escape(nom)}"]`)).length;
+    alert(`✅ Se copió la asistencia de "${origen.claveFinal || origen.actividad}" (${copiados} asistente${copiados === 1 ? "" : "s"}).${fuera ? `\n${fuera} no aparece${fuera === 1 ? "" : "n"} en esta lista y no se copi${fuera === 1 ? "ó" : "aron"}.` : ""}\n\nRevisa la lista y guarda para confirmar.`);
+}
+
 window.cambiarEstadoAsistencia = function(elementoClickeado, valor) {
     const contenedor = elementoClickeado.parentElement;
     contenedor.querySelectorAll('.segment-btn').forEach(btn => btn.classList.remove('active'));
@@ -989,8 +1167,7 @@ async function confirmarAsistenciaFirebase(idRep, nombreBombero) {
         const r = MEMORIA_REPORTES.find(rep => rep.id === idRep);
         
         if (!r.asistentesNombres.includes(nombreBombero)) {
-            const nuevaLista = [...r.asistentesNombres, nombreBombero];
-            await updateDoc(reporteRef, { asistentesNombres: nuevaLista });
+            await updateDoc(reporteRef, { asistentesNombres: arrayUnion(nombreBombero) });
             
             document.getElementById("txt-autoregistro-estado").innerHTML = "✅ ¡Asistencia Operativa Registrada!";
             document.getElementById("txt-autoregistro-estado").style.color = "var(--verde-ok)";
@@ -1989,7 +2166,8 @@ window.abrirDetalleMaquina = async function(id) {
         seleccionarGaveta("G-3");
     }
 
-    if (m.nomenclatura === "B-3") {
+    // Carga inicial del inventario del B-3: solo si ya llegaron los datos (para no duplicar) y hay permiso de edición
+    if (m.nomenclatura === "B-3" && INVENTARIO_CARGADO && tienePermiso("editar_material")) {
         const itemsActuales = MEMORIA_INVENTARIO.filter(i => i.maquinaId === id);
         if (itemsActuales.length === 0) {
             for(let item of inventarioBaseB3) {
@@ -2382,6 +2560,7 @@ window.exportarInventarioUnidades = function() {
 }
 
 window.confirmarBorradoTotal = async function() {
+    if (!tienePermiso("editar_servicios")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const pw = prompt("⚠️ MODO ADMINISTRADOR\nIngresa la clave maestra para borrar TODO el historial:");
     if(pw === "tercera") {
         if(confirm("¿ESTÁS COMPLETAMENTE SEGURO? Se borrarán todos los servicios de la nube.")) {
@@ -2661,10 +2840,19 @@ window.borrarLicencia = async function(id) {
 // ==========================================
 let oficialEditandoId = null;
 
+// Hay datos del sistema anterior (PIN guardados en la base) que todavía no se pasan a cuentas de Firebase
+function hayDatosSinMigrar() {
+    const s = obtenerSesion();
+    return (s && s.legado && s.esMaestro) || MEMORIA_OFICIALES.some(o => o.pin);
+}
+
 window.cargarListaOficiales = function() {
     const cont = document.getElementById("lista-oficiales");
     if (!cont) return;
     if (!tienePermiso("gestionar_oficiales")) { cont.innerHTML = ""; return; }
+
+    const aviso = document.getElementById("aviso-migracion");
+    if (aviso) aviso.style.display = hayDatosSinMigrar() ? "block" : "none";
 
     if (MEMORIA_OFICIALES.length === 0) {
         cont.innerHTML = `<p style="color: var(--texto-gris); text-align: center; margin-top: 20px;"><i class="fa-solid fa-user-shield"></i> Aún no hay oficiales creados. Usa el botón de arriba para agregar el primero.</p>`;
@@ -2674,15 +2862,19 @@ window.cargarListaOficiales = function() {
     cont.innerHTML = MEMORIA_OFICIALES.map(o => {
         const permisos = o.permisos || [];
         const activo = o.activo !== false;
-        const chips = permisos.length === 0
-            ? `<span style="color: var(--texto-gris); font-size: 0.8rem;">Sin permisos asignados</span>`
-            : CATALOGO_PERMISOS.filter(p => permisos.includes(p.key)).map(p => `<span class="badge" style="font-size: 0.7rem;">${p.label}</span>`).join("");
+        const chips = o.maestro
+            ? `<span class="badge badge-gold" style="font-size: 0.7rem;">Todos los permisos</span>`
+            : permisos.length === 0
+                ? `<span style="color: var(--texto-gris); font-size: 0.8rem;">Sin permisos asignados</span>`
+                : CATALOGO_PERMISOS.filter(p => permisos.includes(p.key)).map(p => `<span class="badge" style="font-size: 0.7rem;">${p.label}</span>`).join("");
+        const titulo = o.maestro ? "Acceso maestro (Ayudantes)" : o.nombre;
+        const subtitulo = o.maestro ? "PIN maestro" : o.cargo;
         return `
-        <div class="glass-panel" onclick="abrirEditorOficial('${o.id}')" style="cursor: pointer; padding: 15px; border-radius: 12px; margin-bottom: 12px; border-left: 3px solid ${activo ? 'var(--dorado)' : 'var(--rojo-emergencia)'}; ${activo ? '' : 'opacity: 0.55;'}">
+        <div class="glass-panel" onclick="abrirEditorOficial('${o.id}')" style="cursor: pointer; padding: 15px; border-radius: 16px; margin-bottom: 12px; ${activo ? '' : 'opacity: 0.55;'}">
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
                 <div>
-                    <div style="color: var(--texto-blanco); font-weight: bold;">${o.nombre}</div>
-                    <div style="color: var(--dorado); font-size: 0.85rem; margin-top: 2px;">${o.cargo}${activo ? '' : ' · <span style="color: var(--rojo-emergencia);">Desactivado</span>'}</div>
+                    <div style="color: var(--texto-blanco); font-weight: bold;">${o.maestro ? '<i class="fa-solid fa-key" style="color: var(--dorado);"></i> ' : ''}${titulo}</div>
+                    <div style="color: var(--dorado); font-size: 0.85rem; margin-top: 2px;">${subtitulo}${activo ? '' : ' · <span style="color: var(--rojo-emergencia);">Desactivado</span>'}${o.pin ? ' · <span style="color: var(--texto-gris);">sin migrar</span>' : ''}</div>
                 </div>
                 <i class="fa-solid fa-chevron-right" style="color: var(--texto-gris);"></i>
             </div>
@@ -2705,8 +2897,10 @@ function renderizarCheckboxPermisos(seleccionados) {
 
 window.abrirEditorOficial = function(idOficial) {
     if (!tienePermiso("gestionar_oficiales")) { alert("🔒 No tienes permiso para esta acción."); return; }
+    if (hayDatosSinMigrar()) { alert("Antes de crear o editar oficiales, toca \"Migrar oficiales\" (arriba en esta pestaña)."); return; }
     oficialEditandoId = idOficial || null;
     const o = idOficial ? MEMORIA_OFICIALES.find(x => x.id === idOficial) : null;
+    const esMaestro = !!(o && o.maestro);
 
     const bomberos = MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial;
     const sel = document.getElementById("oficial-nombre");
@@ -2714,12 +2908,20 @@ window.abrirEditorOficial = function(idOficial) {
     sel.value = o ? o.nombre : "";
     sel.disabled = !!o;
 
-    document.getElementById("oficial-titulo").innerText = o ? "Editar Oficial" : "Nuevo Oficial";
+    document.getElementById("oficial-titulo").innerText = esMaestro ? "Acceso maestro" : (o ? "Editar Oficial" : "Nuevo Oficial");
     document.getElementById("oficial-cargo").value = o ? o.cargo : "";
-    document.getElementById("oficial-pin").value = o ? o.pin : "";
+    // El PIN ya no se guarda en la base: al editar, el campo vacío mantiene el PIN actual
+    const inpPin = document.getElementById("oficial-pin");
+    inpPin.value = "";
+    inpPin.placeholder = o ? "Vacío = mantener el PIN actual" : "•••••";
+    document.getElementById("oficial-pin-ayuda").innerText = o
+        ? "Por seguridad el PIN actual no se muestra. Escribe uno nuevo solo si quieres cambiarlo."
+        : "";
     document.getElementById("oficial-activo").checked = o ? o.activo !== false : true;
-    document.getElementById("contenedor-oficial-activo").style.display = o ? "block" : "none";
-    document.getElementById("btn-eliminar-oficial").style.display = o ? "block" : "none";
+    document.getElementById("contenedor-oficial-activo").style.display = o && !esMaestro ? "block" : "none";
+    document.getElementById("btn-eliminar-oficial").style.display = o && !esMaestro ? "block" : "none";
+    // El acceso maestro solo permite cambiar su PIN: tiene todos los permisos siempre
+    document.querySelectorAll(".solo-oficial-normal").forEach(el => el.style.display = esMaestro ? "none" : "");
 
     renderizarCheckboxPermisos(o ? (o.permisos || []) : []);
     abrirModal("modal-oficial");
@@ -2739,59 +2941,145 @@ window.marcarTodosPermisosOficial = function(valor) {
 }
 
 window.generarPinOficial = function() {
-    let pin;
-    do { pin = String(Math.floor(10000 + Math.random() * 90000)); }
-    while (MEMORIA_OFICIALES.some(o => o.pin === pin));
-    document.getElementById("oficial-pin").value = pin;
+    document.getElementById("oficial-pin").value = String(Math.floor(10000 + Math.random() * 90000));
 }
 
 window.guardarOficial = async function() {
     if (!tienePermiso("gestionar_oficiales")) { alert("🔒 No tienes permiso para esta acción."); return; }
-    const nombre = document.getElementById("oficial-nombre").value;
-    const cargo = document.getElementById("oficial-cargo").value.trim();
+    const existente = oficialEditandoId ? MEMORIA_OFICIALES.find(o => o.id === oficialEditandoId) : null;
+    const esMaestro = !!(existente && existente.maestro);
+    const nombre = existente ? existente.nombre : document.getElementById("oficial-nombre").value;
+    const cargo = esMaestro ? existente.cargo : document.getElementById("oficial-cargo").value.trim();
     const pin = document.getElementById("oficial-pin").value.trim();
-    const activo = document.getElementById("oficial-activo").checked;
-    const permisos = Array.from(document.querySelectorAll(".chk-permiso-oficial:checked")).map(c => c.value);
+    const activo = esMaestro ? true : document.getElementById("oficial-activo").checked;
+    const permisos = esMaestro ? [] : Array.from(document.querySelectorAll(".chk-permiso-oficial:checked")).map(c => c.value);
 
     if (!nombre) { alert("Selecciona el voluntario."); return; }
     if (!cargo) { alert("Indica el cargo."); return; }
-    if (!/^\d{5}$/.test(pin)) { alert("El PIN debe tener exactamente 5 números."); return; }
-    if (MEMORIA_OFICIALES.some(o => o.pin === pin && o.id !== oficialEditandoId)) { alert("Ese PIN ya lo usa otro oficial. Elige uno distinto."); return; }
-    if (!oficialEditandoId && MEMORIA_OFICIALES.some(o => o.nombre === nombre)) { alert("Este voluntario ya tiene un perfil de oficial. Ábrelo desde la lista para editarlo."); return; }
+    if ((!existente || pin) && !/^\d{5}$/.test(pin)) { alert("El PIN debe tener exactamente 5 números."); return; }
+    if (!existente && MEMORIA_OFICIALES.some(o => o.nombre === nombre)) { alert("Este voluntario ya tiene un perfil de oficial. Ábrelo desde la lista para editarlo."); return; }
 
+    const sesion = obtenerSesion();
+    if (sesion && !sesion.esMaestro && sesion.id === oficialEditandoId && !permisos.includes("gestionar_oficiales")) {
+        if (!confirm("Te estás quitando el permiso de Gestión de Oficiales a ti mismo. ¿Continuar?")) return;
+    }
+
+    const boton = document.querySelector("#modal-oficial .btn-primary");
+    boton.disabled = true;
     try {
-        const cfg = await getDoc(doc(dbCloud, "configuracion", "admin"));
-        if (cfg.exists() && cfg.data().pin === pin) { alert("Ese PIN coincide con el PIN maestro de Ayudante. Elige otro."); return; }
+        const datos = { nombre, cargo, permisos, activo, maestro: esMaestro };
+        let idFinal = oficialEditandoId;
 
-        // Evitar que un oficial se quite a sí mismo la gestión de oficiales por accidente
-        const sesion = obtenerSesion();
-        if (sesion && !sesion.esMaestro && sesion.id === oficialEditandoId && !permisos.includes("gestionar_oficiales")) {
-            if (!confirm("Te estás quitando el permiso de Gestión de Oficiales a ti mismo. ¿Continuar?")) return;
-        }
-
-        const datos = { nombre, cargo, pin, permisos, activo };
-        if (oficialEditandoId) {
-            await updateDoc(doc(dbCloud, "oficiales", oficialEditandoId), datos);
+        if (pin) {
+            // El PIN se convierte en una cuenta de Firebase; si esa cuenta ya es de otro oficial, el PIN está ocupado
+            const uid = await uidParaPin(pin);
+            const ocupado = MEMORIA_OFICIALES.find(o => o.id === uid);
+            if (ocupado && uid !== oficialEditandoId) { alert("Ese PIN ya lo usa otro oficial. Elige uno distinto."); return; }
+            if (uid !== oficialEditandoId) {
+                await setDoc(doc(dbCloud, "oficiales", uid), { ...datos, creado: existente ? (existente.creado || Date.now()) : Date.now() });
+                // Al cambiar el PIN el perfil pasa a la cuenta nueva; la cuenta del PIN anterior deja de tener acceso
+                if (existente) await deleteDoc(doc(dbCloud, "oficiales", existente.id));
+            } else {
+                await updateDoc(doc(dbCloud, "oficiales", uid), datos);
+            }
+            idFinal = uid;
         } else {
-            await addDoc(collection(dbCloud, "oficiales"), { ...datos, creado: Date.now() });
+            await updateDoc(doc(dbCloud, "oficiales", oficialEditandoId), datos);
         }
+
+        // Si cambié mi propio PIN, mi sesión pasa a la cuenta nueva sin tener que salir
+        if (sesion && sesion.id && existente && sesion.id === existente.id && idFinal !== existente.id) {
+            const nueva = await iniciarSesionConCuenta(pin);
+            if (nueva) { guardarSesion(nueva); suscribirColeccionesProtegidas(); }
+        }
+
         cerrarModal("modal-oficial");
-        alert(`✅ Oficial guardado. PIN de acceso: ${pin}`);
+        alert(pin ? `✅ Guardado. PIN de acceso: ${pin}` : "✅ Cambios guardados.");
     } catch(e) {
-        alert("Error al guardar. Revisa tu conexión.");
         console.error(e);
+        if (e && e.code === "auth/operation-not-allowed") alert("Falta activar el inicio de sesión con correo y contraseña en Firebase (Authentication → Método de acceso).");
+        else alert("Error al guardar. Revisa tu conexión.");
+    } finally {
+        boton.disabled = false;
     }
 }
 
 window.eliminarOficial = async function() {
     if (!tienePermiso("gestionar_oficiales") || !oficialEditandoId) return;
     const o = MEMORIA_OFICIALES.find(x => x.id === oficialEditandoId);
+    if (o && o.maestro) { alert("El acceso maestro no se puede eliminar. Puedes cambiarle el PIN."); return; }
     if (!confirm(`¿Eliminar el perfil de oficial de ${o ? o.nombre : "este oficial"}? Su PIN dejará de funcionar de inmediato.`)) return;
     try {
         await deleteDoc(doc(dbCloud, "oficiales", oficialEditandoId));
         cerrarModal("modal-oficial");
     } catch(e) {
         alert("Error al eliminar. Revisa tu conexión.");
+    }
+}
+
+// ==========================================
+// MIGRACIÓN: PIN guardados en la base → cuentas de Firebase Authentication
+// ==========================================
+// Se hace una sola vez, con las reglas todavía abiertas. Cada oficial conserva su mismo PIN.
+window.migrarOficiales = async function() {
+    const sesion = obtenerSesion();
+    if (!sesion || !sesion.esMaestro) { alert("La migración la debe hacer el Ayudante con el PIN maestro."); return; }
+    if (!confirm("Se crearán las cuentas seguras de todos los oficiales, cada uno con su mismo PIN de hoy, y los PIN se borrarán de la base de datos.\n\n¿Continuar?")) return;
+
+    const estado = document.getElementById("txt-migracion");
+    const boton = document.getElementById("btn-migrar");
+    boton.disabled = true;
+    try {
+        const cfg = await getDoc(doc(dbCloud, "configuracion", "admin"));
+        const pinMaestro = cfg.exists() ? cfg.data().pin : null;
+        const snap = await getDocs(collection(dbCloud, "oficiales"));
+        const pendientes = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(o => o.pin);
+        const total = pendientes.length + (pinMaestro ? 1 : 0);
+        let hechos = 0;
+        const avance = (texto) => { estado.innerText = `${texto} (${hechos}/${total})`; };
+
+        if (pinMaestro) {
+            avance("Creando acceso maestro…");
+            const uid = await uidParaPin(pinMaestro);
+            await setDoc(doc(dbCloud, "oficiales", uid), { nombre: "Acceso maestro", cargo: "Ayudante", maestro: true, permisos: [], activo: true, creado: Date.now() }, { merge: true });
+            hechos++;
+        }
+        // Dos perfiles no pueden compartir PIN (cada PIN es una cuenta): al repetido se le da uno nuevo
+        const usados = new Set(pinMaestro ? [pinMaestro] : []);
+        const cambiados = [];
+        for (const o of pendientes) {
+            avance(`Creando cuenta de ${o.nombre}…`);
+            if (usados.has(o.pin)) {
+                let nuevo;
+                do { nuevo = String(Math.floor(10000 + Math.random() * 90000)); } while (usados.has(nuevo) || pendientes.some(x => x.pin === nuevo));
+                cambiados.push(`${o.cargo} ${o.nombre}: ${nuevo}`);
+                o.pin = nuevo;
+            }
+            usados.add(o.pin);
+            const uid = await uidParaPin(o.pin);
+            const { id, pin, ...datos } = o;
+            await setDoc(doc(dbCloud, "oficiales", uid), { ...datos, maestro: false });
+            if (id !== uid) await deleteDoc(doc(dbCloud, "oficiales", id));
+            hechos++;
+        }
+        if (pinMaestro) await updateDoc(doc(dbCloud, "configuracion", "admin"), { pin: deleteField(), migrado: Date.now() });
+
+        // La sesión actual pasa a la cuenta del acceso maestro
+        if (pinMaestro) {
+            const nueva = await iniciarSesionConCuenta(pinMaestro);
+            if (nueva) guardarSesion(nueva);
+        }
+        estado.innerText = "";
+        aplicarPermisos();
+        suscribirColeccionesProtegidas();
+        alert(`✅ Migración lista: ${hechos} cuenta${hechos === 1 ? "" : "s"} creada${hechos === 1 ? "" : "s"}. Cada oficial entra con su mismo PIN.${cambiados.length ? `\n\n⚠️ Estos perfiles tenían un PIN repetido y quedaron con uno nuevo (entrégaselo):\n${cambiados.join("\n")}` : ""}\n\nÚltimo paso: publica las reglas de seguridad nuevas en Firebase.`);
+    } catch (e) {
+        console.error(e);
+        estado.innerText = "";
+        if (e && e.code === "auth/operation-not-allowed") alert("Falta activar el inicio de sesión con correo y contraseña en Firebase:\nAuthentication → Método de acceso → Correo electrónico/contraseña → Habilitar.\n\nDespués vuelve a tocar Migrar; lo que ya se hizo no se duplica.");
+        else alert("La migración se detuvo por un error de conexión. Puedes volver a tocar Migrar: retoma donde quedó sin duplicar nada.");
+    } finally {
+        boton.disabled = false;
     }
 }
 
