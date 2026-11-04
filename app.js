@@ -122,8 +122,11 @@ async function iniciarSesionConCuenta(pin) {
     try {
         cred = await signInWithEmailAndPassword(authCloud, await correoDePin(pin), claveDePin(pin));
     } catch (e) {
-        if (["auth/invalid-credential", "auth/user-not-found", "auth/wrong-password", "auth/invalid-email", "auth/operation-not-allowed", "auth/invalid-login-credentials"].includes(e.code)) return null;
-        throw e;
+        // Solo se corta por bloqueo de intentos o falta de internet. Cualquier otro error
+        // (PIN que no existe, Authentication aún sin activar, etc.) sigue con el PIN antiguo.
+        if (["auth/too-many-requests", "auth/network-request-failed"].includes(e.code)) throw e;
+        console.warn("Cuenta de oficial no disponible:", e.code || e);
+        return null;
     }
     let perfil = null;
     try { perfil = await getDoc(doc(dbCloud, "oficiales", cred.user.uid)); } catch (e) {}
@@ -266,7 +269,7 @@ async function verificarAdminPin() {
         if (e && e.code === "auth/too-many-requests") {
             alert("🔒 Demasiados intentos fallidos. Por seguridad, espera unos minutos antes de volver a intentar.");
         } else {
-            alert("Error de conexión al verificar el PIN.");
+            alert(`Error de conexión al verificar el PIN.${e && e.code ? ` (${e.code})` : ""}`);
         }
         falloPin();
     }
@@ -2997,7 +3000,7 @@ window.guardarOficial = async function() {
         alert(pin ? `✅ Guardado. PIN de acceso: ${pin}` : "✅ Cambios guardados.");
     } catch(e) {
         console.error(e);
-        if (e && e.code === "auth/operation-not-allowed") alert("Falta activar el inicio de sesión con correo y contraseña en Firebase (Authentication → Método de acceso).");
+        if (e && ["auth/operation-not-allowed", "auth/configuration-not-found", "auth/admin-restricted-operation"].includes(e.code)) alert("Falta activar el inicio de sesión con correo y contraseña en Firebase (Authentication → Método de acceso).");
         else alert("Error al guardar. Revisa tu conexión.");
     } finally {
         boton.disabled = false;
@@ -3076,7 +3079,7 @@ window.migrarOficiales = async function() {
     } catch (e) {
         console.error(e);
         estado.innerText = "";
-        if (e && e.code === "auth/operation-not-allowed") alert("Falta activar el inicio de sesión con correo y contraseña en Firebase:\nAuthentication → Método de acceso → Correo electrónico/contraseña → Habilitar.\n\nDespués vuelve a tocar Migrar; lo que ya se hizo no se duplica.");
+        if (e && ["auth/operation-not-allowed", "auth/configuration-not-found", "auth/admin-restricted-operation"].includes(e.code)) alert("Falta activar el inicio de sesión con correo y contraseña en Firebase:\nAuthentication → Método de acceso → Correo electrónico/contraseña → Habilitar.\n\nDespués vuelve a tocar Migrar; lo que ya se hizo no se duplica.");
         else alert("La migración se detuvo por un error de conexión. Puedes volver a tocar Migrar: retoma donde quedó sin duplicar nada.");
     } finally {
         boton.disabled = false;
