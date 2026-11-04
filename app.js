@@ -5,6 +5,110 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getFirestore, enableIndexedDbPersistence, collection, addDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, deleteField, arrayUnion, doc, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
+// ==========================================
+// AVISOS Y CONFIRMACIONES PROPIAS
+// Reemplazan las ventanas grises del navegador. Los mensajes cortos aparecen abajo y se
+// van solos; los largos o con varias líneas se muestran en una tarjeta con "Entendido".
+// ==========================================
+const ICONOS_AVISO = { ok: "fa-circle-check", error: "fa-circle-xmark", aviso: "fa-triangle-exclamation", info: "fa-circle-info", bloqueo: "fa-lock" };
+
+function clasificarMensaje(texto) {
+    const t = String(texto ?? "");
+    let tipo = "info";
+    if (/^\s*🔒/.test(t)) tipo = "bloqueo";
+    else if (/^\s*(✅|🎉)/.test(t) || /correctamente|con éxito|guardad[oa]|registrad[oa]|actualizad[oa]|eliminad[oa]|enviad[oa]|iniciada|aprobad[oa]|copiad[oa]|fusionad[oa]/i.test(t)) tipo = "ok";
+    if (/^\s*(❌|⛔)/.test(t) || /^error|no se pudo|error de conexión|no tienes permiso|incorrect/i.test(t)) tipo = "error";
+    else if (/^\s*⚠️/.test(t) || /^(selecciona|completa|debes|ingresa|escribe|elige|falta)/i.test(t.replace(/^[^\wÁÉÍÓÚáéíóúÑñ¿¡]+/, ""))) tipo = tipo === "ok" ? "ok" : "aviso";
+    // Se quita el emoji inicial: el ícono ya lo muestra
+    const limpio = t.replace(/^\s*(✅|❌|⚠️|🔒|🎉|⛔|ℹ️)\s*/u, "");
+    return { tipo, texto: limpio };
+}
+
+function htmlSeguro(t) {
+    return String(t ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+function contenedorAvisos() {
+    let c = document.getElementById("sigo-avisos");
+    if (!c) { c = document.createElement("div"); c.id = "sigo-avisos"; document.body.appendChild(c); }
+    return c;
+}
+
+function mostrarToast(texto, tipo) {
+    const c = contenedorAvisos();
+    const el = document.createElement("div");
+    el.className = `sigo-toast sigo-toast-${tipo}`;
+    el.innerHTML = `<i class="fa-solid ${ICONOS_AVISO[tipo]}"></i><span>${htmlSeguro(texto)}</span>`;
+    el.onclick = () => cerrar();
+    c.appendChild(el);
+    while (c.children.length > 3) c.firstChild.remove();
+    requestAnimationFrame(() => el.classList.add("visible"));
+    if (tipo === "ok" && navigator.vibrate) { try { navigator.vibrate(25); } catch (e) {} }
+    let cerrado = false;
+    function cerrar() {
+        if (cerrado) return; cerrado = true;
+        el.classList.remove("visible");
+        setTimeout(() => el.remove(), 300);
+    }
+    setTimeout(cerrar, tipo === "error" ? 5000 : 3200);
+}
+
+function mostrarDialogo({ texto, tipo, botones }) {
+    return new Promise(resolve => {
+        const fondo = document.createElement("div");
+        fondo.className = "sigo-dialogo-fondo";
+        fondo.innerHTML = `
+            <div class="sigo-dialogo glass-panel" role="dialog" aria-modal="true">
+                <div class="sigo-dialogo-icono sigo-icono-${tipo}"><i class="fa-solid ${ICONOS_AVISO[tipo] || ICONOS_AVISO.info}"></i></div>
+                <p class="sigo-dialogo-texto">${htmlSeguro(texto)}</p>
+                <div class="sigo-dialogo-botones">
+                    ${botones.map((b, i) => `<button data-i="${i}" class="${b.clase}">${htmlSeguro(b.texto)}</button>`).join("")}
+                </div>
+            </div>`;
+        document.body.appendChild(fondo);
+        requestAnimationFrame(() => fondo.classList.add("visible"));
+        const terminar = (valor) => {
+            document.removeEventListener("keydown", teclas, true);
+            fondo.classList.remove("visible");
+            setTimeout(() => fondo.remove(), 200);
+            resolve(valor);
+        };
+        const teclas = (e) => {
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); terminar(botones.find(b => b.esCancelar)?.valor ?? botones[botones.length - 1].valor); }
+            if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); terminar(botones[botones.length - 1].valor); }
+        };
+        document.addEventListener("keydown", teclas, true);
+        fondo.querySelectorAll("button").forEach(b => b.onclick = () => terminar(botones[+b.dataset.i].valor));
+        fondo.onclick = (e) => { if (e.target === fondo && botones.length === 1) terminar(botones[0].valor); };
+        if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    });
+}
+
+// Reemplaza a window.alert dentro de la app. Devuelve una promesa que termina al cerrarse.
+function alert(mensaje) {
+    const { tipo, texto } = clasificarMensaje(mensaje);
+    if (texto.length > 110 || texto.includes("\n")) {
+        return mostrarDialogo({ texto, tipo, botones: [{ texto: "Entendido", clase: "btn-primary", valor: true }] });
+    }
+    mostrarToast(texto, tipo);
+    return Promise.resolve(true);
+}
+window.avisar = alert;
+
+// Reemplaza a window.confirm. Uso: if (!(await confirmar("¿Seguro?"))) return;
+function confirmar(mensaje, opciones = {}) {
+    const { texto } = clasificarMensaje(mensaje);
+    const peligro = opciones.peligro ?? /eliminar|borrar|borrarán|rechazar|no se puede deshacer|cerrar la sesión/i.test(texto);
+    return mostrarDialogo({
+        texto,
+        tipo: peligro ? "error" : "aviso",
+        botones: [
+            { texto: opciones.cancelar || "Cancelar", clase: "btn-secundary", valor: false, esCancelar: true },
+            { texto: opciones.aceptar || (peligro ? "Sí, continuar" : "Aceptar"), clase: peligro ? "btn-primary sigo-btn-peligro" : "btn-primary", valor: true }
+        ]
+    });
+}
+
 const firebaseConfig = {
   apiKey: "AIzaSyCsmWPpVM8hy5N1B0Pmhe-GHO_FbZAGIDw",
   authDomain: "sigo-tercera.firebaseapp.com",
@@ -202,16 +306,16 @@ setInterval(async () => {
     if (exp && Date.now() > parseInt(exp)) {
         await cerrarSesionOficial();
         aplicarPermisos();
-        alert("🔒 La sesión de oficial ha caducado por inactividad (30 minutos).");
+        await alert("🔒 La sesión de oficial ha caducado por inactividad (30 minutos).");
         location.reload();
     }
 }, 30000);
 
-window.abrirPadAdmin = function() {
+window.abrirPadAdmin = async function() {
     const sesion = obtenerSesion();
     if (sesion) {
         const quien = sesion.esMaestro ? "Ayudante" : sesion.nombre;
-        if(confirm(`Sesión activa: ${quien}.\n¿Cerrar la sesión y volver a Voluntario?`)) {
+        if (await confirmar(`Sesión activa: ${quien}.\n¿Cerrar la sesión y volver a Voluntario?`, { aceptar: "Cerrar sesión" })) {
             cerrarSesionOficial().then(() => location.reload());
         }
         return;
@@ -483,6 +587,7 @@ async function inicializarDatosEnNube() {
 function conectarRadioEnTiempoReal() {
     onSnapshot(query(collection(dbCloud, "reportes"), orderBy("fecha", "desc")), (snapshot) => {
         MEMORIA_REPORTES = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        REPORTES_CARGADOS = true;
         revisarEmergenciasEnCurso(); 
         if(document.getElementById('historial').classList.contains('active')) cargarHistorial();
         if(document.getElementById('mapa').classList.contains('active')) inicializarMapaGlobal();
@@ -578,7 +683,7 @@ function suscribirColeccionesProtegidas() {
             if (!actual || actual.id !== sesion.id) return;
             if (!perfil.exists() || perfil.data().activo === false) {
                 await cerrarSesionOficial();
-                alert("🔒 Tu perfil de oficial fue desactivado o eliminado. Se cerró la sesión.");
+                await alert("🔒 Tu perfil de oficial fue desactivado o eliminado. Se cerró la sesión.");
                 location.reload();
                 return;
             }
@@ -1005,7 +1110,7 @@ window.renderListaCopiarAsistencia = function() {
 
     const cont = document.getElementById("lista-copiar-asistencia");
     if (lista.length === 0) {
-        cont.innerHTML = `<p style="color: var(--texto-gris); text-align: center; padding: 20px 0;">No hay servicios con asistencia para copiar.</p>`;
+        cont.innerHTML = estadoVacio("fa-regular fa-clipboard", "Nada para copiar", "No hay otros servicios con asistencia registrada.");
         return;
     }
     cont.innerHTML = lista.map(r => {
@@ -1047,7 +1152,7 @@ window.copiarAsistenciaDe = function(id) {
 
     cerrarModal("modal-copiar-asistencia");
     const fuera = asistentes.filter(nom => !cont.querySelector(`.bombero-card[data-nombre="${CSS.escape(nom)}"]`)).length;
-    alert(`✅ Se copió la asistencia de "${origen.claveFinal || origen.actividad}" (${copiados} asistente${copiados === 1 ? "" : "s"}).${fuera ? `\n${fuera} no aparece${fuera === 1 ? "" : "n"} en esta lista y no se copi${fuera === 1 ? "ó" : "aron"}.` : ""}\n\nRevisa la lista y guarda para confirmar.`);
+    alert(`✅ Asistencia copiada: ${copiados} asistente${copiados === 1 ? "" : "s"}${fuera ? ` (${fuera} no está${fuera === 1 ? "" : "n"} en esta lista)` : ""}. Revisa y guarda.`);
 }
 
 window.cambiarEstadoAsistencia = function(elementoClickeado, valor) {
@@ -1234,43 +1339,156 @@ async function confirmarAsistenciaFirebase(idRep, nombreBombero) {
 // ==========================================
 // 7. HISTORIAL Y EDICIÓN
 // ==========================================
-function cargarHistorial() {
-    const esOficial = tienePermiso("historico");
-    
-    let reportes = MEMORIA_REPORTES;
+// ==========================================
+// HISTORIAL: agrupado por mes, con filtros, buscador y color por tipo de clave
+// (mismo código de colores que la Central)
+// ==========================================
+let REPORTES_CARGADOS = false;
+let FILTRO_HISTORIAL = "todos";
+let LIMITE_HISTORIAL = 60;
 
-    // BLOQUEO: Voluntarios solo ven el mes actual en el historial
-    if (!esOficial) {
-        const ahora = new Date();
-        const mesActualStr = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,'0')}`;
-        reportes = reportes.filter(r => {
-            const d = new Date(r.fecha);
-            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` === mesActualStr;
-        });
+const COLORES_CLAVE = {
+    "10-0": "#e04848", "10-1": "#e04848", "10-9-1": "#e04848", "10-12": "#e04848", "10-14": "#e04848",
+    "10-2": "#1f9ad6",
+    "10-3": "#2ea65a", "10-4": "#2ea65a",
+    "10-3-1": "#f08a24", "10-5": "#f08a24", "10-6": "#f08a24",
+    "10-3-2": "#9b4dca"
+};
+
+function separarClave(texto) {
+    const m = String(texto || "").match(/^(10-[\d-]+)\s*(.*)$/);
+    return m ? { codigo: m[1].replace(/-$/, ""), nombre: m[2] || m[1] } : { codigo: null, nombre: texto || "Servicio" };
+}
+
+function estiloClave(r) {
+    if (r.esActividadInterna) return { color: "var(--dorado)", etiqueta: `<i class="fa-solid fa-people-group"></i>` };
+    const { codigo } = separarClave(r.claveFinal || r.actividad);
+    return { color: COLORES_CLAVE[codigo] || "#8a94a6", etiqueta: codigo || `<i class="fa-solid fa-fire"></i>` };
+}
+
+window.cambiarFiltroHistorial = function(boton) {
+    FILTRO_HISTORIAL = boton.dataset.filtro;
+    document.querySelectorAll(".hist-filtro").forEach(b => b.classList.toggle("activo", b === boton));
+    LIMITE_HISTORIAL = 60;
+    cargarHistorial();
+}
+
+window.filtrarHistorial = function() {
+    LIMITE_HISTORIAL = 60;
+    cargarHistorial();
+}
+
+window.verMasHistorial = function() {
+    LIMITE_HISTORIAL += 60;
+    cargarHistorial(true);
+}
+
+function esqueletoLista(n = 4) {
+    return Array.from({ length: n }, () => `
+        <div class="esqueleto-card">
+            <div class="esqueleto esqueleto-icono"></div>
+            <div style="flex: 1;">
+                <div class="esqueleto esqueleto-linea" style="width: 65%;"></div>
+                <div class="esqueleto esqueleto-linea" style="width: 45%;"></div>
+                <div class="esqueleto esqueleto-linea corta" style="width: 30%;"></div>
+            </div>
+        </div>`).join("");
+}
+
+function estadoVacio(icono, titulo, detalle = "") {
+    return `<div class="estado-vacio">
+                <div class="estado-vacio-icono"><i class="${icono}"></i></div>
+                <p class="estado-vacio-titulo">${titulo}</p>
+                ${detalle ? `<p class="estado-vacio-detalle">${detalle}</p>` : ""}
+            </div>`;
+}
+
+function cargarHistorial(conservarScroll = false) {
+    const lista = document.getElementById("lista-historial");
+    if (!REPORTES_CARGADOS) { lista.innerHTML = esqueletoLista(5); return; }
+
+    const esOficial = tienePermiso("historico");
+    const ahora = new Date();
+    const claveMes = (d) => `${d.getFullYear()}-${d.getMonth()}`;
+    const mesActual = claveMes(ahora);
+
+    let reportes = [...MEMORIA_REPORTES].sort((a, b) => b.fecha - a.fecha);
+    // Voluntarios solo ven el mes actual en el historial
+    if (!esOficial) reportes = reportes.filter(r => claveMes(new Date(r.fecha)) === mesActual);
+
+    const hayEnCurso = reportes.some(r => r.estadoServicio === "En Curso");
+    const chipCurso = document.querySelector(".hist-filtro-curso");
+    chipCurso.style.display = hayEnCurso ? "" : "none";
+    if (!hayEnCurso && FILTRO_HISTORIAL === "curso") {
+        FILTRO_HISTORIAL = "todos";
+        document.querySelectorAll(".hist-filtro").forEach(b => b.classList.toggle("activo", b.dataset.filtro === "todos"));
+    }
+    document.querySelector('.hist-filtro[data-filtro="mes"]').style.display = esOficial ? "" : "none";
+
+    if (FILTRO_HISTORIAL === "emergencias") reportes = reportes.filter(r => !r.esActividadInterna);
+    if (FILTRO_HISTORIAL === "actividades") reportes = reportes.filter(r => r.esActividadInterna);
+    if (FILTRO_HISTORIAL === "mes") reportes = reportes.filter(r => claveMes(new Date(r.fecha)) === mesActual);
+    if (FILTRO_HISTORIAL === "curso") reportes = reportes.filter(r => r.estadoServicio === "En Curso");
+
+    const texto = (document.getElementById("hist-busqueda").value || "").trim().toLowerCase();
+    if (texto) {
+        reportes = reportes.filter(r => [r.actividad, r.claveFinal, r.direccion, ...(r.asistentesNombres || []), ...(r.maquinasUtilizadas || [])]
+            .some(v => String(v || "").toLowerCase().includes(texto)));
     }
 
-    const html = reportes.map(r => {
-        const d = new Date(r.fecha);
-        const maquinas = r.maquinasUtilizadas && r.maquinasUtilizadas.length > 0 ? r.maquinasUtilizadas.join(", ") : "Sin Carro";
-        
-        const badgeDoble = r.esDoble ? `<span style="color: var(--dorado); font-size: 0.75rem; font-weight: bold; margin-left: 8px; padding: 2px 6px; border: 1px solid rgba(217, 178, 51, 0.4); border-radius: 6px; background: rgba(217, 178, 51, 0.1);"><i class="fa-solid fa-star"></i> x2</span>` : "";
-        const tituloReclasificado = r.claveFinal ? `${r.actividad} <span style="color:var(--texto-gris); font-size: 0.85rem;"><br>➡️ Cambió a: <span style="color:var(--dorado);">${r.claveFinal}</span></span>` : r.actividad;
-        const badgeEstado = r.estadoServicio === "En Curso" ? `<span class="badge badge-red" style="animation: pulsarBanner 2s infinite;">EN CURSO</span>` : "";
+    if (reportes.length === 0) {
+        lista.innerHTML = texto
+            ? estadoVacio("fa-solid fa-magnifying-glass", "Sin resultados", `No hay servicios que coincidan con "${htmlSeguro(texto)}".`)
+            : estadoVacio("fa-regular fa-folder-open", "Sin servicios por aquí", esOficial ? "Cuando se registre un servicio aparecerá en esta lista." : "Aún no hay servicios registrados este mes.");
+        return;
+    }
 
-        return `
-            <div class="card-item" onclick="verDetalleReporte('${r.id}')">
-                <div class="card-header" style="align-items: flex-start;">
-                    <span class="card-title">${tituloReclasificado} ${badgeDoble}</span>
-                    <span class="card-date">${fechaCL(d)} ${horaCL(d)}</span>
-                </div>
-                <div style="color: var(--texto-blanco); margin: 8px 0;">${r.direccion} ${badgeEstado}</div>
-                <div class="card-body">
-                    <span><span class="material-symbols-outlined" style="color: var(--rojo-emergencia); font-size: 1.2rem; vertical-align: text-bottom; margin-right: 4px;">fire_truck</span> ${maquinas}</span>
-                    <span style="color: var(--verde-ok);"><i class="fa-solid fa-users"></i> ${r.asistentesNombres.length} Asistencias</span>
+    // Conteo por mes (sobre todo lo filtrado, no solo lo visible)
+    const porMes = {};
+    reportes.forEach(r => { const k = claveMes(new Date(r.fecha)); porMes[k] = (porMes[k] || 0) + 1; });
+
+    const visibles = reportes.slice(0, LIMITE_HISTORIAL);
+    let mesPrevio = null, n = 0;
+    const html = visibles.map(r => {
+        const d = new Date(r.fecha);
+        const k = claveMes(d);
+        let cabecera = "";
+        if (k !== mesPrevio) {
+            mesPrevio = k;
+            const total = porMes[k];
+            cabecera = `<div class="hist-mes"><span>${MESES_LARGOS[d.getMonth()]} ${d.getFullYear()}</span><span class="hist-mes-total">${total} servicio${total === 1 ? "" : "s"}</span></div>`;
+        }
+        const { color, etiqueta } = estiloClave(r);
+        const { nombre } = separarClave(r.claveFinal || r.actividad);
+        const original = r.claveFinal ? separarClave(r.actividad).codigo || r.actividad : null;
+        const maquinas = (r.maquinasUtilizadas || []).length ? r.maquinasUtilizadas.join(", ") : "Sin carro";
+        const asistentes = (r.asistentesNombres || []).length;
+        const enCurso = r.estadoServicio === "En Curso";
+        const retraso = Math.min(n++, 10) * 35;
+
+        return `${cabecera}
+            <div class="card-item hist-card" style="--clave: ${color}; animation-delay: ${retraso}ms;" onclick="verDetalleReporte('${r.id}')">
+                <div class="hist-clave">${etiqueta}</div>
+                <div class="hist-info">
+                    <div class="hist-titulo">
+                        <span>${htmlSeguro(nombre)}</span>
+                        ${r.esDoble ? `<span class="hist-chip hist-chip-doble"><i class="fa-solid fa-star"></i> x2</span>` : ""}
+                        ${enCurso ? `<span class="hist-chip hist-chip-curso"><span class="hist-punto"></span> En curso</span>` : ""}
+                    </div>
+                    <div class="hist-direccion">${htmlSeguro(r.direccion || "")}</div>
+                    ${original ? `<div class="hist-reclasificado"><i class="fa-solid fa-arrow-right-arrow-left"></i> Inicialmente ${htmlSeguro(original)}</div>` : ""}
+                    <div class="hist-pie">
+                        <span><i class="fa-regular fa-clock"></i> ${fechaCL(d)} · ${horaCL(d)}</span>
+                        ${r.esActividadInterna ? "" : `<span><span class="material-symbols-outlined">fire_truck</span> ${htmlSeguro(maquinas)}</span>`}
+                        <span class="hist-asist"><i class="fa-solid fa-user-check"></i> ${asistentes}</span>
+                    </div>
                 </div>
             </div>`;
-    }).join('');
-    document.getElementById("lista-historial").innerHTML = html || "<p style='color: var(--texto-gris);'>No hay servicios registrados en este periodo.</p>";
+    }).join("");
+
+    const quedan = reportes.length - visibles.length;
+    lista.innerHTML = html + (quedan > 0 ? `<button class="btn-secundary hist-ver-mas" onclick="verMasHistorial()">Ver ${Math.min(quedan, 60)} servicios más</button>` : "");
+    if (conservarScroll) lista.querySelectorAll(".hist-card").forEach(c => c.style.animation = "none");
 }
 
 window.verDetalleReporte = function(id) {
@@ -1362,7 +1580,7 @@ window.confirmarFusionServicio = async function() {
     const duplicado = MEMORIA_REPORTES.find(r => r.id === idDup);
     if (!principal || !duplicado) return;
 
-    if (!confirm(`¿Fusionar "${duplicado.actividad}" (${duplicado.direccion}) dentro de "${principal.actividad}" (${principal.direccion})?\n\nEl servicio duplicado se eliminará y sus asistentes y carros se sumarán al servicio principal. Esta acción no se puede deshacer.`)) return;
+    if (!await confirmar(`¿Fusionar "${duplicado.actividad}" (${duplicado.direccion}) dentro de "${principal.actividad}" (${principal.direccion})?\n\nEl servicio duplicado se eliminará y sus asistentes y carros se sumarán al servicio principal. Esta acción no se puede deshacer.`)) return;
 
     const asistentesFusion = unionListas(principal.asistentesNombres, duplicado.asistentesNombres);
     const licenciasFusion = unionListas(principal.licenciasNombres, duplicado.licenciasNombres).filter(n => !asistentesFusion.includes(n));
@@ -1576,7 +1794,7 @@ window.guardarEdicionReporte = async function() {
 
 window.borrarReporte = async function(id) {
     if (!tienePermiso("editar_servicios")) { alert("🔒 No tienes permiso para esta acción."); return; }
-    if(confirm("¿Estás seguro de eliminar este servicio? Esta acción no se puede deshacer.")) {
+    if(await confirmar("¿Estás seguro de eliminar este servicio? Esta acción no se puede deshacer.")) {
         await deleteDoc(doc(dbCloud, "reportes", id));
         cerrarModal("modal-detalle-reporte");
     }
@@ -2349,7 +2567,7 @@ window.agregarItemInventario = async function(seguirAgregando = false) {
     // Si el mismo material ya está en esa gaveta, se ofrece sumar en vez de duplicar
     const existente = !codigo && MEMORIA_INVENTARIO.find(i => i.maquinaId === maquinaEditandoId && i.ubicacion === gaveta && normalizarNombre(i.nombreItem) === normalizarNombre(nom));
     try {
-        if (existente && confirm(`"${existente.nombreItem}" ya está en ${gaveta} (cantidad ${existente.cantidadActual ?? 0}).\n\n¿Sumar ${cant} a ese registro?\n(Cancelar = crearlo como un elemento aparte)`)) {
+        if (existente && await confirmar(`"${existente.nombreItem}" ya está en ${gaveta} (cantidad ${existente.cantidadActual ?? 0}).\n\n¿Sumar ${cant} a ese registro o crearlo como un elemento aparte?`, { aceptar: `Sumar ${cant}`, cancelar: "Crear aparte", peligro: false })) {
             await updateDoc(doc(dbCloud, "inventario", existente.id), {
                 cantidadTeorica: (existente.cantidadTeorica ?? 0) + cant,
                 cantidadActual: (existente.cantidadActual ?? 0) + cant
@@ -2387,7 +2605,7 @@ window.agregarItemInventario = async function(seguirAgregando = false) {
 
 window.eliminarItem = async function(idItem) {
     if (!tienePermiso("editar_material")) { alert("🔒 No tienes permiso para esta acción."); return; }
-    if(confirm("¿Seguro que deseas eliminar esta herramienta del inventario?")) {
+    if(await confirmar("¿Seguro que deseas eliminar esta herramienta del inventario?")) {
         await deleteDoc(doc(dbCloud, "inventario", idItem));
     }
 }
@@ -2483,7 +2701,7 @@ window.agregarBitacoraHerramienta = async function() {
 window.eliminarItemDesdePerfil = async function() {
     if (!tienePermiso("editar_material")) { alert("🔒 No tienes permiso para esta acción."); return; }
     if (!itemPerfilActualId) return;
-    if (confirm("¿Seguro que deseas eliminar esta herramienta del inventario? Se perderá también su bitácora.")) {
+    if (await confirmar("¿Seguro que deseas eliminar esta herramienta del inventario? Se perderá también su bitácora.")) {
         await deleteDoc(doc(dbCloud, "inventario", itemPerfilActualId));
         cerrarModal("modal-perfil-herramienta");
     }
@@ -2630,10 +2848,10 @@ window.confirmarBorradoTotal = async function() {
     if (!tienePermiso("editar_servicios")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const pw = prompt("⚠️ MODO ADMINISTRADOR\nIngresa la clave maestra para borrar TODO el historial:");
     if(pw === "tercera") {
-        if(confirm("¿ESTÁS COMPLETAMENTE SEGURO? Se borrarán todos los servicios de la nube.")) {
+        if(await confirmar("¿ESTÁS COMPLETAMENTE SEGURO? Se borrarán todos los servicios de la nube.")) {
             const snapshot = await getDocs(collection(dbCloud, "reportes"));
             snapshot.forEach(async (d) => { await deleteDoc(doc(dbCloud, "reportes", d.id)); });
-            alert("Historial en la nube eliminado con éxito.");
+            await alert("Historial en la nube eliminado con éxito.");
             location.reload();
         }
     } else if (pw !== null) {
@@ -2964,12 +3182,12 @@ window.cargarListaLicencias = function() {
         </div>`;
     }).join('');
 
-    contenedor.innerHTML = html || "<p style='color: var(--texto-gris); text-align: center; margin-top: 20px;'>No hay licencias registradas en la base de datos.</p>";
+    contenedor.innerHTML = html || estadoVacio("fa-regular fa-calendar-check", "Sin licencias", "Cuando alguien envíe una solicitud aparecerá aquí.");
 }
 
 window.rechazarLicencia = async function(id) {
     if (!tienePermiso("licencias")) { alert("🔒 No tienes permiso para esta acción."); return; }
-    if(confirm("¿Estás seguro de RECHAZAR esta licencia? No se aplicará automáticamente en las asistencias de esta persona.")) {
+    if(await confirmar("¿Estás seguro de RECHAZAR esta licencia? No se aplicará automáticamente en las asistencias de esta persona.")) {
         try {
             await updateDoc(doc(dbCloud, "licencias", id), { estado: "Rechazada" });
             alert("Licencia rechazada.");
@@ -2981,7 +3199,7 @@ window.rechazarLicencia = async function(id) {
 
 window.borrarLicencia = async function(id) {
     if (!tienePermiso("licencias")) { alert("🔒 No tienes permiso para esta acción."); return; }
-    if(confirm("¿Estás seguro de ELIMINAR permanentemente esta licencia del historial?")) {
+    if(await confirmar("¿Estás seguro de ELIMINAR permanentemente esta licencia del historial?")) {
         try {
             await deleteDoc(doc(dbCloud, "licencias", id));
             alert("Licencia eliminada correctamente.");
@@ -3011,7 +3229,7 @@ window.cargarListaOficiales = function() {
     if (aviso) aviso.style.display = hayDatosSinMigrar() ? "block" : "none";
 
     if (MEMORIA_OFICIALES.length === 0) {
-        cont.innerHTML = `<p style="color: var(--texto-gris); text-align: center; margin-top: 20px;"><i class="fa-solid fa-user-shield"></i> Aún no hay oficiales creados. Usa el botón de arriba para agregar el primero.</p>`;
+        cont.innerHTML = estadoVacio("fa-solid fa-user-shield", "Aún no hay oficiales", "Usa el botón de arriba para agregar el primero.");
         return;
     }
 
@@ -3117,7 +3335,7 @@ window.guardarOficial = async function() {
 
     const sesion = obtenerSesion();
     if (sesion && !sesion.esMaestro && sesion.id === oficialEditandoId && !permisos.includes("gestionar_oficiales")) {
-        if (!confirm("Te estás quitando el permiso de Gestión de Oficiales a ti mismo. ¿Continuar?")) return;
+        if (!await confirmar("Te estás quitando el permiso de Gestión de Oficiales a ti mismo. ¿Continuar?")) return;
     }
 
     const boton = document.querySelector("#modal-oficial .btn-primary");
@@ -3164,7 +3382,7 @@ window.eliminarOficial = async function() {
     if (!tienePermiso("gestionar_oficiales") || !oficialEditandoId) return;
     const o = MEMORIA_OFICIALES.find(x => x.id === oficialEditandoId);
     if (o && o.maestro) { alert("El acceso maestro no se puede eliminar. Puedes cambiarle el PIN."); return; }
-    if (!confirm(`¿Eliminar el perfil de oficial de ${o ? o.nombre : "este oficial"}? Su PIN dejará de funcionar de inmediato.`)) return;
+    if (!await confirmar(`¿Eliminar el perfil de oficial de ${o ? o.nombre : "este oficial"}? Su PIN dejará de funcionar de inmediato.`)) return;
     try {
         await deleteDoc(doc(dbCloud, "oficiales", oficialEditandoId));
         cerrarModal("modal-oficial");
@@ -3180,7 +3398,7 @@ window.eliminarOficial = async function() {
 window.migrarOficiales = async function() {
     const sesion = obtenerSesion();
     if (!sesion || !sesion.esMaestro) { alert("La migración la debe hacer el Ayudante con el PIN maestro."); return; }
-    if (!confirm("Se crearán las cuentas seguras de todos los oficiales, cada uno con su mismo PIN de hoy, y los PIN se borrarán de la base de datos.\n\n¿Continuar?")) return;
+    if (!await confirmar("Se crearán las cuentas seguras de todos los oficiales, cada uno con su mismo PIN de hoy, y los PIN se borrarán de la base de datos.\n\n¿Continuar?")) return;
 
     const estado = document.getElementById("txt-migracion");
     const boton = document.getElementById("btn-migrar");
@@ -3298,7 +3516,7 @@ window.guardarOficio = async function() {
     if (archivo.type !== "application/pdf" && !archivo.name.toLowerCase().endsWith(".pdf")) { alert("El archivo debe ser un PDF."); return; }
     if (archivo.size > OFICIO_TAMANO_MAXIMO) { alert(`El PDF pesa ${tamanoLegible(archivo.size)}. El máximo es ${tamanoLegible(OFICIO_TAMANO_MAXIMO)}.`); return; }
     if (MEMORIA_OFICIOS.some(o => (o.ord || "").trim().toLowerCase() === ord.toLowerCase()) &&
-        !confirm(`Ya existe un oficio con ORD "${ord}". ¿Guardarlo de todas formas?`)) return;
+        !await confirmar(`Ya existe un oficio con ORD "${ord}". ¿Guardarlo de todas formas?`)) return;
 
     const progreso = document.getElementById("oficio-progreso");
     const botones = document.querySelectorAll("#form-oficio button");
@@ -3351,7 +3569,9 @@ window.cargarListaOficios = function() {
         (filtro ? `${lista.length} de ${MEMORIA_OFICIOS.length} oficios` : `${MEMORIA_OFICIOS.length} ${MEMORIA_OFICIOS.length === 1 ? "oficio" : "oficios"}`);
 
     if (lista.length === 0) {
-        cont.innerHTML = `<p style="color: var(--texto-gris); text-align: center; margin-top: 20px;"><i class="fa-solid fa-folder-open"></i> ${MEMORIA_OFICIOS.length === 0 ? "Aún no hay oficios archivados." : "Ningún oficio coincide con la búsqueda."}</p>`;
+        cont.innerHTML = MEMORIA_OFICIOS.length === 0
+            ? estadoVacio("fa-regular fa-folder-open", "Aún no hay oficios", "Los oficios que subas quedarán archivados aquí.")
+            : estadoVacio("fa-solid fa-magnifying-glass", "Sin resultados", "Ningún oficio coincide con la búsqueda.");
         return;
     }
 
@@ -3433,7 +3653,7 @@ window.descargarPdfOficio = async function(id) {
 window.eliminarOficio = async function(id) {
     if (!tienePermiso("oficios")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const o = MEMORIA_OFICIOS.find(x => x.id === id);
-    if (!o || !confirm(`¿Eliminar el oficio ORD ${o.ord}?\n\n"${o.materia}"\n\nSe borrará también el PDF y no se puede recuperar.`)) return;
+    if (!o || !await confirmar(`¿Eliminar el oficio ORD ${o.ord}?\n\n"${o.materia}"\n\nSe borrará también el PDF y no se puede recuperar.`)) return;
     try {
         await deleteDoc(doc(dbCloud, "oficios", id));
         for (let i = 0; i < (o.partes || 0); i++) await deleteDoc(doc(dbCloud, "oficios_partes", `${id}_${i}`));

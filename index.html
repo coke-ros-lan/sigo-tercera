@@ -19,38 +19,48 @@
     <link rel="apple-touch-icon" href="LogoTercera.png">
     
     <script>
-        // Estilo visual elegido en este dispositivo: Normal, Oscuro o Claro. Se aplica antes de dibujar la página.
+        // Estilo visual elegido en este dispositivo: Normal, Oscuro, Claro o Auto (sigue al teléfono). Se aplica antes de dibujar la página.
         var TEMAS_SIGO = { clasico: "#051024", grafito: "#0f1115", claro: "#f4f6fa" };
+        var MEDIA_CLARO = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+        function temaElegido() {
+            try { return localStorage.getItem("sigo_tema") || "clasico"; } catch (e) { return "clasico"; }
+        }
+        function resolverTema(tema) {
+            if (tema === "auto") return (MEDIA_CLARO && MEDIA_CLARO.matches) ? "claro" : "grafito";
+            return TEMAS_SIGO[tema] ? tema : "clasico";
+        }
         function temaActual() {
             if (document.documentElement.classList.contains("tema-grafito")) return "grafito";
             if (document.documentElement.classList.contains("tema-claro")) return "claro";
             return "clasico";
         }
         function aplicarTema(tema) {
-            if (!TEMAS_SIGO[tema]) tema = "clasico";
-            document.documentElement.classList.toggle("tema-grafito", tema === "grafito");
-            document.documentElement.classList.toggle("tema-claro", tema === "claro");
+            var real = resolverTema(tema);
+            document.documentElement.classList.toggle("tema-grafito", real === "grafito");
+            document.documentElement.classList.toggle("tema-claro", real === "claro");
         }
-        (function () {
-            var tema = "clasico";
-            try { tema = localStorage.getItem("sigo_tema") || "clasico"; } catch (e) {}
-            aplicarTema(tema);
-        })();
+        aplicarTema(temaElegido());
         function marcarTemaActivo() {
-            var tema = temaActual();
+            var elegido = temaElegido();
             document.querySelectorAll("[data-tema]").forEach(function (b) {
-                b.classList.toggle("active", b.getAttribute("data-tema") === tema);
+                b.classList.toggle("active", b.getAttribute("data-tema") === elegido);
             });
             var meta = document.querySelector('meta[name="theme-color"]');
-            if (meta) meta.setAttribute("content", TEMAS_SIGO[tema]);
+            if (meta) meta.setAttribute("content", TEMAS_SIGO[temaActual()]);
         }
         function cambiarTema(tema) {
-            aplicarTema(tema);
             try { localStorage.setItem("sigo_tema", tema); } catch (e) {}
+            aplicarTema(tema);
             marcarTemaActivo();
             // El gráfico de estadísticas toma sus colores al dibujarse; se redibuja si está a la vista
             var est = document.getElementById("estadisticas");
             if (est && est.classList.contains("active") && window.actualizarDashboard) window.actualizarDashboard();
+        }
+        // En "Auto", si el teléfono cambia entre claro y oscuro, la app lo sigue
+        if (MEDIA_CLARO) {
+            var alCambiarSistema = function () { if (temaElegido() === "auto") cambiarTema("auto"); };
+            if (MEDIA_CLARO.addEventListener) MEDIA_CLARO.addEventListener("change", alCambiarSistema);
+            else if (MEDIA_CLARO.addListener) MEDIA_CLARO.addListener(alCambiarSistema);
         }
         document.addEventListener("DOMContentLoaded", marcarTemaActivo);
     </script>
@@ -123,6 +133,7 @@
                 <div class="segment-btn" data-tema="clasico" onclick="cambiarTema('clasico')">Normal</div>
                 <div class="segment-btn" data-tema="grafito" onclick="cambiarTema('grafito')">Oscuro</div>
                 <div class="segment-btn" data-tema="claro" onclick="cambiarTema('claro')">Claro</div>
+                <div class="segment-btn" data-tema="auto" onclick="cambiarTema('auto')">Auto</div>
             </div>
         </div>
         <button id="btn-perfil" class="version-btn" onclick="abrirPadAdmin()"><i class="fa-solid fa-user"></i> Perfil: Voluntario</button>
@@ -226,6 +237,19 @@
         <section id="historial" class="view-section">
             <div class="header-section">
                 <h2 class="title-header">Historial Operativo</h2>
+            </div>
+            <div class="hist-herramientas">
+                <div class="hist-buscar">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="search" id="hist-busqueda" class="input-glass" placeholder="Buscar clave, dirección o bombero" oninput="filtrarHistorial()" autocomplete="off">
+                </div>
+                <div id="hist-filtros" class="hist-filtros">
+                    <button class="hist-filtro activo" data-filtro="todos" onclick="cambiarFiltroHistorial(this)">Todos</button>
+                    <button class="hist-filtro" data-filtro="emergencias" onclick="cambiarFiltroHistorial(this)"><i class="fa-solid fa-fire"></i> Emergencias</button>
+                    <button class="hist-filtro" data-filtro="actividades" onclick="cambiarFiltroHistorial(this)"><i class="fa-solid fa-people-group"></i> Actividades</button>
+                    <button class="hist-filtro" data-filtro="mes" onclick="cambiarFiltroHistorial(this)"><i class="fa-regular fa-calendar"></i> Este mes</button>
+                    <button class="hist-filtro hist-filtro-curso" data-filtro="curso" onclick="cambiarFiltroHistorial(this)" style="display: none;"><span class="hist-punto"></span> En curso</button>
+                </div>
             </div>
             <div id="lista-historial" class="list-container"></div>
         </section>
