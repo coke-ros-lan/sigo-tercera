@@ -700,6 +700,7 @@ window.alCambiarActividad = function() {
 
 window.irPaso1 = function() {
     if (!tienePermiso("crear_servicios")) { alert("🔒 Solo los Ayudantes y oficiales autorizados pueden crear servicios."); return; }
+    idServicioEnCreacion = null;
     reporteTemporal = {
         actividad: "", direccion: "", fecha: null, esActividadInterna: false,
         maquinasUtilizadas: [], latitud: DatosClaves.latBase, longitud: DatosClaves.lonBase,
@@ -868,14 +869,54 @@ window.obtenerGPSDispositivo = function() {
     }
 }
 
+// ==========================================
+// PUBLICACIÓN SIN DUPLICADOS
+// Cada servicio nuevo recibe su identificador una sola vez: aunque se toque el botón
+// varias veces (o se reintente sin señal), siempre se escribe el mismo documento.
+// ==========================================
+let idServicioEnCreacion = null;
+let guardandoServicio = false;
+
+function bloquearBotonesServicio(bloquear) {
+    document.querySelectorAll("#modal-servicio .modal-footer-spacing button").forEach(b => {
+        if (bloquear) {
+            b.dataset.htmlOriginal = b.innerHTML;
+            b.disabled = true;
+            b.style.opacity = "0.6";
+            if (/guardarEnCurso|guardarReporteFinal/.test(b.getAttribute("onclick") || "")) b.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Guardando…`;
+        } else {
+            if (b.dataset.htmlOriginal) b.innerHTML = b.dataset.htmlOriginal;
+            b.disabled = false;
+            b.style.opacity = "";
+        }
+    });
+}
+
+// Devuelve "ok" si la nube confirmó, o "pendiente" si quedó guardado en el teléfono esperando señal
+async function publicarServicioNuevo(datos) {
+    if (!idServicioEnCreacion) idServicioEnCreacion = doc(collection(dbCloud, "reportes")).id;
+    const escritura = setDoc(doc(dbCloud, "reportes", idServicioEnCreacion), datos);
+    const espera = new Promise(resolve => setTimeout(() => resolve("pendiente"), 10000));
+    const resultado = await Promise.race([escritura.then(() => "ok"), espera]);
+    idServicioEnCreacion = null;   // el siguiente servicio tendrá su propio identificador
+    return resultado;
+}
+const AVISO_SIN_SENAL = "\n\n📶 Sin señal por ahora: quedó guardado en este teléfono y se publicará solo al volver la conexión. No lo vuelvas a crear.";
+
 window.guardarEnCurso = async function() {
+    if (guardandoServicio) return;
+    guardandoServicio = true;
+    bloquearBotonesServicio(true);
     reporteTemporal.estadoServicio = "En Curso";
     try {
-        await addDoc(collection(dbCloud, "reportes"), {...reporteTemporal, fecha: new Date(reporteTemporal.fecha).getTime()});
+        const resultado = await publicarServicioNuevo({...reporteTemporal, fecha: new Date(reporteTemporal.fecha).getTime()});
         cerrarModal('modal-servicio');
-        alert("Emergencia iniciada. El personal ya puede registrar su asistencia desde sus teléfonos. (PIN de seguridad en caso de fallo de GPS: " + reporteTemporal.pinEmergencia + ")");
+        alert("Emergencia iniciada. El personal ya puede registrar su asistencia desde sus teléfonos. (PIN de seguridad en caso de fallo de GPS: " + reporteTemporal.pinEmergencia + ")" + (resultado === "pendiente" ? AVISO_SIN_SENAL : ""));
     } catch(e) {
-        alert("Error de conexión.");
+        alert("Error de conexión. Puedes volver a tocar el botón: no se duplicará.");
+    } finally {
+        guardandoServicio = false;
+        bloquearBotonesServicio(false);
     }
 }
 
@@ -1020,6 +1061,7 @@ window.cambiarEstadoAsistencia = function(elementoClickeado, valor) {
 };
 
 window.guardarReporteFinal = async function() {
+    if (guardandoServicio) return;
     reporteTemporal.estadoServicio = "Finalizado";
     reporteTemporal.asistentesNombres = []; reporteTemporal.licenciasNombres = []; reporteTemporal.faltasNombres = [];
     
@@ -1038,16 +1080,23 @@ window.guardarReporteFinal = async function() {
         }
     });
 
+    guardandoServicio = true;
+    bloquearBotonesServicio(true);
     try {
-        await addDoc(collection(dbCloud, "reportes"), {...reporteTemporal, fecha: new Date(reporteTemporal.fecha).getTime()});
+        const resultado = await publicarServicioNuevo({...reporteTemporal, fecha: new Date(reporteTemporal.fecha).getTime()});
         cerrarModal('modal-servicio');
         volverPaso1();
         document.getElementById("inp-direccion").value = "";
         document.querySelectorAll(".chk-maquina").forEach(c => c.checked = false);
         document.querySelectorAll(".chk-apoyo").forEach(c => c.checked = false);
         document.getElementById("inp-otras-maquinas").value = "";
-        alert("¡Reporte guardado y finalizado correctamente!");
-    } catch(e) { alert("Error de conexión."); }
+        alert("¡Reporte guardado y finalizado correctamente!" + (resultado === "pendiente" ? AVISO_SIN_SENAL : ""));
+    } catch(e) {
+        alert("Error de conexión. Puedes volver a tocar Guardar: no se duplicará.");
+    } finally {
+        guardandoServicio = false;
+        bloquearBotonesServicio(false);
+    }
 }
 
 // ==========================================
@@ -1454,8 +1503,10 @@ window.abrirEdicionReporte = function(id) {
     abrirModal("modal-editar-reporte");
 }
 
+let guardandoEdicion = false;
 window.guardarEdicionReporte = async function() {
     if (!tienePermiso("editar_servicios")) { alert("🔒 No tienes permiso para esta acción."); return; }
+    if (guardandoEdicion) return;
     const rEdit = MEMORIA_REPORTES.find(rep => rep.id === reporteEditandoId);
     const estSer = document.getElementById("edit-estado-servicio").value;
     const dir = document.getElementById("edit-direccion").value;
@@ -1493,6 +1544,12 @@ window.guardarEdicionReporte = async function() {
         }
     });
 
+    guardandoEdicion = true;
+    const botonEdicion = document.querySelector('#modal-editar-reporte button[onclick="guardarEdicionReporte()"]');
+    const htmlBoton = botonEdicion.innerHTML;
+    botonEdicion.disabled = true; botonEdicion.style.opacity = "0.6";
+    botonEdicion.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Guardando…`;
+    try {
     await updateDoc(doc(dbCloud, "reportes", reporteEditandoId), { 
         estadoServicio: estSer,
         direccion: dir, 
@@ -1508,6 +1565,13 @@ window.guardarEdicionReporte = async function() {
     
     alert("Servicio actualizado correctamente.");
     cerrarModal("modal-editar-reporte");
+    } catch(e) {
+        alert("Error de conexión al guardar los cambios.");
+    } finally {
+        guardandoEdicion = false;
+        botonEdicion.disabled = false; botonEdicion.style.opacity = "";
+        botonEdicion.innerHTML = htmlBoton;
+    }
 }
 
 window.borrarReporte = async function(id) {
@@ -2681,13 +2745,81 @@ function prepararFormLicencia() {
     sel.value = elegido;
     sel.onchange = function() {
         const option = sel.options[sel.selectedIndex];
-        document.getElementById("licencia-cargo").value = option ? (option.getAttribute('data-cargo') || "") : "";
+        const cargo = option ? (option.getAttribute('data-cargo') || "") : "";
+        document.getElementById("licencia-cargo").value = cargo;
+        mostrarCargoLicencia(sel.value ? cargo : "");
+        if (sel.value) quitarFaltaLicencia(sel);
     };
 }
 
 function limpiarFormLicencia() {
     ["licencia-nombre", "licencia-rut", "licencia-cargo", "licencia-inicio", "licencia-termino", "licencia-motivo"]
-        .forEach(id => document.getElementById(id).value = "");
+        .forEach(id => { const el = document.getElementById(id); el.value = ""; el.classList.remove("lic-falta"); });
+    document.getElementById("licencia-termino").removeAttribute("min");
+    document.querySelectorAll(".lic-chip").forEach(c => c.classList.remove("activo"));
+    document.getElementById("lic-error").style.display = "none";
+    mostrarCargoLicencia("");
+    actualizarResumenLicencia();
+}
+
+function mostrarCargoLicencia(cargo) {
+    const chip = document.getElementById("lic-cargo-chip");
+    chip.style.display = cargo ? "inline-flex" : "none";
+    chip.innerHTML = cargo ? `<i class="fa-solid fa-id-badge"></i> ${cargo}` : "";
+}
+
+function quitarFaltaLicencia(el) {
+    el.classList.remove("lic-falta");
+    if (!document.querySelector("#lic-form .lic-falta")) document.getElementById("lic-error").style.display = "none";
+}
+
+const fechaLicenciaCorta = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" });
+
+window.actualizarResumenLicencia = function() {
+    const ini = document.getElementById("licencia-inicio");
+    const fin = document.getElementById("licencia-termino");
+    const caja = document.getElementById("lic-resumen-fechas");
+    [ini, fin].forEach(el => el.value && quitarFaltaLicencia(el));
+    if (ini.value) fin.min = ini.value; else fin.removeAttribute("min");
+    if (!ini.value || !fin.value) { caja.style.display = "none"; return; }
+
+    const dias = Math.round((new Date(fin.value + "T12:00:00") - new Date(ini.value + "T12:00:00")) / 86400000) + 1;
+    caja.style.display = "flex";
+    if (dias < 1) {
+        caja.classList.add("lic-resumen-error");
+        caja.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> La fecha "Hasta" no puede ser anterior a "Desde".`;
+        return;
+    }
+    caja.classList.remove("lic-resumen-error");
+    caja.innerHTML = dias === 1
+        ? `<i class="fa-solid fa-calendar-day"></i> <span><b>1 día</b> · ${fechaLicenciaCorta(ini.value)}</span>`
+        : `<i class="fa-solid fa-calendar-days"></i> <span><b>${dias} días</b> · ${fechaLicenciaCorta(ini.value)} al ${fechaLicenciaCorta(fin.value)}</span>`;
+}
+
+window.elegirMotivoLicencia = function(chip) {
+    const txt = document.getElementById("licencia-motivo");
+    const opciones = [...document.querySelectorAll(".lic-chip")].map(c => c.innerText);
+    // Si el texto está vacío o es solo otra opción, se reemplaza; si ya escribió algo, se antepone la categoría
+    const actual = txt.value.trim();
+    const sinCategoria = actual.replace(new RegExp(`^(${opciones.join("|")})(:\\s*|\\s+|$)`), "");
+    txt.value = sinCategoria ? `${chip.innerText}: ${sinCategoria}` : chip.innerText;
+    marcarChipMotivo();
+    txt.focus();
+    txt.setSelectionRange(txt.value.length, txt.value.length);
+}
+
+window.marcarChipMotivo = function() {
+    const txt = document.getElementById("licencia-motivo");
+    if (txt.value.trim()) quitarFaltaLicencia(txt);
+    document.querySelectorAll(".lic-chip").forEach(c => {
+        c.classList.toggle("activo", new RegExp(`^${c.innerText}(\\b|:)`).test(txt.value));
+    });
+}
+
+window.nuevaSolicitudLicencia = function() {
+    limpiarFormLicencia();
+    document.getElementById("lic-exito").style.display = "none";
+    document.getElementById("lic-form").style.display = "block";
 }
 
 // Se mantiene por compatibilidad: abre la pestaña de licencia
@@ -2697,6 +2829,7 @@ window.abrirModalLicencia = function() {
 }
 
 window.formatearRUT = function(input) {
+    if (input.id === "licencia-rut") quitarFaltaLicencia(input);
     let valor = input.value.replace(/[^0-9kK]/g, '').toUpperCase();
     if (valor.length === 0) {
         input.value = "";
@@ -2722,16 +2855,27 @@ window.enviarLicencia = async function() {
     const fTermino = document.getElementById("licencia-termino").value;
     const motivo = document.getElementById("licencia-motivo").value.trim();
 
-    if (!nombre || !rut || !fInicio || !fTermino || !motivo) {
-        alert("Por favor, completa todos los campos requeridos.");
+    const error = document.getElementById("lic-error");
+    const faltan = [["licencia-nombre", nombre], ["licencia-rut", rut], ["licencia-inicio", fInicio], ["licencia-termino", fTermino], ["licencia-motivo", motivo]]
+        .filter(([, v]) => !v).map(([id]) => id);
+    document.querySelectorAll("#lic-form .lic-falta").forEach(el => el.classList.remove("lic-falta"));
+    if (faltan.length) {
+        faltan.forEach(id => document.getElementById(id).classList.add("lic-falta"));
+        error.innerText = "Completa los campos marcados en rojo.";
+        error.style.display = "block";
         return;
     }
-
     if (new Date(fInicio) > new Date(fTermino)) {
-        alert("La fecha de término no puede ser anterior a la de inicio.");
+        document.getElementById("licencia-termino").classList.add("lic-falta");
+        error.innerText = "La fecha \"Hasta\" no puede ser anterior a \"Desde\".";
+        error.style.display = "block";
         return;
     }
+    error.style.display = "none";
 
+    const boton = document.getElementById("btn-enviar-licencia");
+    boton.disabled = true;
+    boton.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Enviando…`;
     try {
         await addDoc(collection(dbCloud, "licencias"), {
             nombre: nombre,
@@ -2742,10 +2886,19 @@ window.enviarLicencia = async function() {
             motivo: motivo,
             fechaSolicitud: Date.now()
         });
-        alert("✅ Licencia enviada y registrada correctamente. Se aplicará automáticamente en las listas de asistencia internas.");
+        const dias = Math.round((new Date(fTermino + "T12:00:00") - new Date(fInicio + "T12:00:00")) / 86400000) + 1;
+        document.getElementById("lic-exito-detalle").innerText = dias === 1
+            ? `${nombre}\n${fechaLicenciaCorta(fInicio)} (1 día)`
+            : `${nombre}\n${fechaLicenciaCorta(fInicio)} al ${fechaLicenciaCorta(fTermino)} (${dias} días)`;
+        document.getElementById("lic-form").style.display = "none";
+        document.getElementById("lic-exito").style.display = "block";
         limpiarFormLicencia();
     } catch(e) {
-        alert("Error al enviar la licencia. Verifica tu conexión.");
+        error.innerText = "No se pudo enviar. Revisa tu conexión e inténtalo de nuevo.";
+        error.style.display = "block";
+    } finally {
+        boton.disabled = false;
+        boton.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Enviar solicitud`;
     }
 }
 

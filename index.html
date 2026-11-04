@@ -151,40 +151,75 @@
         </section>
 
         <section id="solicitar-licencia" class="view-section">
-            <div class="header-section">
-                <h2 class="title-header">Solicitar Licencia</h2>
-                <p style="color: var(--texto-gris); margin-top: 5px;">Válido únicamente para Actividades Internas (Citaciones).</p>
-            </div>
-            <div class="form-glass glass-panel" style="padding: 20px; border-radius: 15px; max-width: 600px;">
-                <div class="form-group">
-                    <label>Nombre Completo</label>
-                    <select id="licencia-nombre" class="input-glass"></select>
-                </div>
-                <div class="form-group" style="display: flex; gap: 10px;">
-                    <div style="flex: 1;">
-                        <label>RUT</label>
-                        <input type="text" id="licencia-rut" class="input-glass" placeholder="12.345.678-9" oninput="formatearRUT(this)" maxlength="12">
-                    </div>
-                    <div style="flex: 1;">
-                        <label>Cargo</label>
-                        <input type="text" id="licencia-cargo" class="input-glass" readonly style="color: var(--dorado); background: rgba(0,0,0,0.5);">
+            <div class="lic-wrap">
+                <div class="header-section lic-hero">
+                    <div class="lic-icono"><i class="fa-solid fa-calendar-xmark"></i></div>
+                    <div>
+                        <h2 class="title-header">Solicitar Licencia</h2>
+                        <p class="lic-sub">Avisa si no podrás asistir a una citación.</p>
                     </div>
                 </div>
-                <div class="form-group" style="display: flex; gap: 10px;">
-                    <div style="flex: 1;">
-                        <label>Fecha de Inicio</label>
-                        <input type="date" id="licencia-inicio" class="input-glass">
-                    </div>
-                    <div style="flex: 1;">
-                        <label>Fecha de Término</label>
-                        <input type="date" id="licencia-termino" class="input-glass">
-                    </div>
+
+                <div class="lic-aviso">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span>Válida solo para <b>actividades internas</b> (citaciones). Se aplica sola en las listas de asistencia de esas fechas.</span>
                 </div>
-                <div class="form-group">
-                    <label>Motivo de la Licencia</label>
-                    <textarea id="licencia-motivo" class="input-glass" rows="3" placeholder="Indique el motivo (trabajo, salud, estudios, etc.)"></textarea>
+
+                <div id="lic-form" class="glass-panel lic-card">
+                    <div class="lic-bloque">
+                        <div class="lic-paso"><span>1</span> ¿Quién solicita?</div>
+                        <div class="form-group">
+                            <label>Nombre completo</label>
+                            <select id="licencia-nombre" class="input-glass"></select>
+                            <input type="hidden" id="licencia-cargo">
+                            <div id="lic-cargo-chip" class="lic-cargo-chip" style="display: none;"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>RUT</label>
+                            <input type="text" id="licencia-rut" class="input-glass" placeholder="12.345.678-9" oninput="formatearRUT(this)" maxlength="12" inputmode="text" autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="lic-bloque">
+                        <div class="lic-paso"><span>2</span> Período</div>
+                        <div class="form-group lic-fila">
+                            <div>
+                                <label>Desde</label>
+                                <input type="date" id="licencia-inicio" class="input-glass" onchange="actualizarResumenLicencia()">
+                            </div>
+                            <div>
+                                <label>Hasta</label>
+                                <input type="date" id="licencia-termino" class="input-glass" onchange="actualizarResumenLicencia()">
+                            </div>
+                        </div>
+                        <div id="lic-resumen-fechas" class="lic-resumen" style="display: none;"></div>
+                    </div>
+
+                    <div class="lic-bloque">
+                        <div class="lic-paso"><span>3</span> Motivo</div>
+                        <div class="lic-chips">
+                            <button type="button" class="lic-chip" onclick="elegirMotivoLicencia(this)">Trabajo</button>
+                            <button type="button" class="lic-chip" onclick="elegirMotivoLicencia(this)">Estudios</button>
+                            <button type="button" class="lic-chip" onclick="elegirMotivoLicencia(this)">Salud</button>
+                            <button type="button" class="lic-chip" onclick="elegirMotivoLicencia(this)">Viaje</button>
+                            <button type="button" class="lic-chip" onclick="elegirMotivoLicencia(this)">Familiar</button>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <textarea id="licencia-motivo" class="input-glass" rows="3" placeholder="Elige una opción o escribe el motivo" oninput="marcarChipMotivo()"></textarea>
+                        </div>
+                    </div>
+
+                    <p id="lic-error" class="lic-error" style="display: none;"></p>
+                    <button id="btn-enviar-licencia" class="btn-primary lic-enviar" onclick="enviarLicencia()"><i class="fa-solid fa-paper-plane"></i> Enviar solicitud</button>
                 </div>
-                <button class="btn-primary" style="width: 100%; margin-top: 5px;" onclick="enviarLicencia()"><i class="fa-solid fa-paper-plane"></i> Enviar Solicitud</button>
+
+                <div id="lic-exito" class="glass-panel lic-card lic-exito" style="display: none;">
+                    <div class="lic-exito-icono"><i class="fa-solid fa-check"></i></div>
+                    <h3>Solicitud enviada</h3>
+                    <p id="lic-exito-detalle"></p>
+                    <p class="lic-exito-nota">Quedará registrada en las listas de asistencia de esas fechas.</p>
+                    <button class="btn-text" onclick="nuevaSolicitudLicencia()"><i class="fa-solid fa-plus"></i> Enviar otra solicitud</button>
+                </div>
             </div>
         </section>
 
