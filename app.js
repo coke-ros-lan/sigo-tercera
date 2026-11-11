@@ -2789,7 +2789,8 @@ window.exportarEquipoPersonal = function() {
         { titulo: "", columnas: ["N°", "Nombre Completo", "Cargo"] },
         { titulo: "ESTRUCTURAL", columnas: ["Casco", "Chaqueta", "Jardinera", "Botas", "Tipo botas", "Guantes", "Esclavina"] },
         { titulo: "MULTIROL", columnas: ["Casco", "Chaqueta", "Pantalón", "Botas", "Tipo botas"] },
-        { titulo: "UNIFORMES", columnas: ["Parada", "Cuartel"] },
+        { titulo: "UNIFORME DE PARADA", columnas: ["Chaqueta", "Pantalón", "Casco", "Cinturón"] },
+        { titulo: "UNIFORME DE CUARTEL", columnas: ["Uniforme de cuartel"] },
         { titulo: "LINTERNA Y RADIO", columnas: ["Linterna", "Radio", "Marca radio", "Modelo radio", "N° serie"] },
         { titulo: "REVISIÓN DE CARGO", columnas: ["Estado", "Fecha", "Revisado por", "Observaciones"] }
     ];
@@ -2797,7 +2798,7 @@ window.exportarEquipoPersonal = function() {
     let col = 0;
     grupos.forEach(g => {
         g.columnas.forEach((c, k) => { fila1.push(k === 0 ? g.titulo : ""); fila2.push(c); });
-        if (g.titulo) merges.push({ s: { r: 0, c: col }, e: { r: 0, c: col + g.columnas.length - 1 } });
+        if (g.titulo && g.columnas.length > 1) merges.push({ s: { r: 0, c: col }, e: { r: 0, c: col + g.columnas.length - 1 } });
         else g.columnas.forEach((_, k) => merges.push({ s: { r: 0, c: col + k }, e: { r: 1, c: col + k } }));
         col += g.columnas.length;
     });
@@ -2813,7 +2814,7 @@ window.exportarEquipoPersonal = function() {
             index + 1, b.nombre, b.cargo,
             d(est.casco), d(est.chaqueta), d(est.jardinera), d(est.botas), d(est.botasTipo), d(est.guantes), d(est.esclavina),
             d(mul.casco), d(mul.chaqueta), d(mul.pantalon), d(mul.botas), d(mul.botasTipo),
-            d(uni.parada), d(uni.cuartel),
+            d(uni.paradaChaqueta), d(uni.paradaPantalon), d(uni.paradaCasco), d(uni.paradaCinturon), d(uni.cuartel),
             d(acc.linterna), acc.radio || "No tiene", d(acc.radioMarca), d(acc.radioModelo), d(acc.radioSerie),
             ETIQUETA_ESTADO_CARGO[estado], revisado ? fechaCL(rev.fecha) : "-", revisado ? d(rev.revisor) : "-", revisado ? d(rev.observaciones) : "-"
         ];
@@ -2977,7 +2978,10 @@ function htmlEquipoFicha(b) {
 
         <h4 style="color: var(--dorado); margin-bottom: 10px;"><i class="fa-solid fa-shirt"></i> Uniformes</h4>
         <div class="card-item equipo-card" style="border-left: 3px solid var(--dorado);">
-            ${filaEquipo("Uniforme de parada:", uni.parada)}
+            ${filaEquipo("Parada · Chaqueta (Talla):", uni.paradaChaqueta)}
+            ${filaEquipo("Parada · Pantalón (Talla):", uni.paradaPantalon)}
+            ${filaEquipo("Parada · Casco (Sí/No):", uni.paradaCasco)}
+            ${filaEquipo("Parada · Cinturón (Sí/No):", uni.paradaCinturon)}
             ${filaEquipo("Uniforme de cuartel:", uni.cuartel, true)}
         </div>
 
@@ -3023,7 +3027,9 @@ window.abrirEdicionEPP = function(nombre) {
     v("edit-epp-mul-casco", mul.casco); v("edit-epp-mul-chaqueta", mul.chaqueta); v("edit-epp-mul-pantalon", mul.pantalon);
     v("edit-epp-mul-botas", mul.botas); v("edit-epp-mul-botas-tipo", mul.botasTipo);
 
-    v("edit-uni-parada", uni.parada); v("edit-uni-cuartel", uni.cuartel);
+    v("edit-par-chaqueta", uni.paradaChaqueta); v("edit-par-pantalon", uni.paradaPantalon);
+    v("edit-par-casco", uni.paradaCasco); v("edit-par-cinturon", uni.paradaCinturon);
+    v("edit-uni-cuartel", uni.cuartel);
     v("edit-acc-linterna", acc.linterna); v("edit-acc-radio", acc.radio);
     v("edit-acc-radio-marca", acc.radioMarca); v("edit-acc-radio-modelo", acc.radioModelo); v("edit-acc-radio-serie", acc.radioSerie);
     alCambiarRadioEPP();
@@ -3059,7 +3065,11 @@ window.guardarEdicionEPP = async function(marcarRevisado) {
             casco: g("edit-epp-mul-casco"), chaqueta: g("edit-epp-mul-chaqueta"), pantalon: g("edit-epp-mul-pantalon"),
             botas: g("edit-epp-mul-botas"), botasTipo: g("edit-epp-mul-botas-tipo")
         },
-        uniformes: { parada: g("edit-uni-parada"), cuartel: g("edit-uni-cuartel") },
+        uniformes: {
+            paradaChaqueta: g("edit-par-chaqueta"), paradaPantalon: g("edit-par-pantalon"),
+            paradaCasco: g("edit-par-casco"), paradaCinturon: g("edit-par-cinturon"),
+            cuartel: g("edit-uni-cuartel")
+        },
         accesorios: {
             linterna: g("edit-acc-linterna"), radio,
             radioMarca: radio ? g("edit-acc-radio-marca") : "", radioModelo: radio ? g("edit-acc-radio-modelo") : "", radioSerie: radio ? g("edit-acc-radio-serie") : ""
