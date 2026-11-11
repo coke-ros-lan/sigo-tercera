@@ -1170,3 +1170,86 @@ html.tema-claro .esqueleto { background-image: linear-gradient(90deg, rgba(20,35
 @media (prefers-reduced-motion: reduce) {
     .card-item.hist-card, .sigo-toast, .sigo-dialogo, .esqueleto { animation: none !important; transition: none !important; }
 }
+
+/* ========================================== */
+/* 24. CARGO DE EQUIPO Y CONTROL DE CARGO      */
+/* ========================================== */
+.epp-seccion { margin: 26px 0 14px 0; font-size: 1rem; }
+#modal-editar-epp .modal-body > .epp-seccion:first-child { margin-top: 0; }
+.epp-fila { display: flex; gap: 10px; }
+.epp-fila > div { flex: 1; min-width: 0; }
+.epp-revision {
+    margin-top: 26px; padding: 18px; border-radius: 18px;
+    background: rgba(217, 178, 51, 0.08); border: 1px solid rgba(217, 178, 51, 0.25);
+}
+html.tema-claro .epp-revision { background: rgba(229, 183, 59, 0.09); border-color: rgba(183, 134, 26, 0.3); }
+.epp-ultima-revision { color: var(--texto-gris); font-size: 0.86rem; margin: -4px 0 14px 0; line-height: 1.4; }
+.epp-ultima-revision b { color: var(--texto-blanco); }
+.epp-botones { display: flex; gap: 10px; margin-top: 18px; }
+.epp-botones button { flex: 1; margin: 0; padding: 14px 10px; }
+.epp-botones .btn-primary { flex: 1.4; }
+
+.equipo-card { padding: 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 0.95rem; }
+.equipo-fila { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px; }
+html.tema-claro .equipo-fila { border-bottom-color: var(--c-borde); }
+.equipo-fila.ultima { border-bottom: none; padding-bottom: 0; }
+.equipo-etiqueta { color: var(--texto-gris); flex-shrink: 0; }
+.equipo-valor { font-weight: 600; color: var(--texto-blanco); text-align: right; }
+.equipo-valor.vacio { color: var(--texto-gris); font-weight: 400; opacity: 0.7; }
+
+.cargo-estado-ficha {
+    padding: 12px 14px; border-radius: 14px; margin-bottom: 18px; font-size: 0.9rem; font-weight: 600;
+    display: flex; flex-direction: column; gap: 6px;
+}
+.cargo-estado-ok { background: rgba(77, 255, 136, 0.1); color: var(--verde-ok); }
+.cargo-estado-obs { background: rgba(217, 178, 51, 0.13); color: var(--dorado); }
+.cargo-estado-pend { background: rgba(255, 255, 255, 0.05); color: var(--texto-gris); }
+html.tema-claro .cargo-estado-ok { background: rgba(30, 158, 85, 0.1); color: #1e9e55; }
+html.tema-claro .cargo-estado-pend { background: var(--c-suave); }
+.cargo-obs-ficha { color: var(--texto-blanco); font-weight: 400; font-size: 0.88rem; }
+
+.cargo-resumen { padding: 22px; border-radius: 24px; margin-bottom: 18px; }
+.cargo-resumen-cifras { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 14px; }
+.cargo-cifra { font-size: 2.2rem; font-weight: 800; color: var(--texto-blanco); line-height: 1; }
+.cargo-cifra-total { font-size: 1.2rem; color: var(--texto-gris); font-weight: 600; }
+.cargo-cifra-label { color: var(--texto-gris); font-size: 0.9rem; margin-top: 6px; }
+.cargo-porcentaje { font-size: 1.6rem; font-weight: 800; color: var(--dorado); }
+.cargo-barra { height: 12px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+html.tema-claro .cargo-barra { background: var(--c-suave); }
+.cargo-barra-relleno { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--dorado), var(--verde-ok)); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.cargo-mini { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 14px; color: var(--texto-gris); font-size: 0.85rem; }
+.cargo-mini span { display: inline-flex; align-items: center; gap: 6px; }
+.cargo-mini b { color: var(--texto-blanco); }
+.cargo-punto { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.cargo-ciclo { color: var(--texto-gris); font-size: 0.82rem; margin-top: 12px; }
+.cargo-acciones { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+.card-item.cargo-card { flex-direction: row; align-items: center; gap: 14px; padding: 14px 16px; animation: histEntrada 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.cargo-avatar {
+    width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.95rem;
+}
+.cargo-avatar-pend { background: rgba(255,255,255,0.07); color: var(--texto-gris); }
+html.tema-claro .cargo-avatar-pend { background: var(--c-suave); }
+.cargo-avatar-ok { background: rgba(77, 255, 136, 0.14); color: var(--verde-ok); }
+html.tema-claro .cargo-avatar-ok { background: rgba(30, 158, 85, 0.12); color: #1e9e55; }
+.cargo-avatar-obs { background: rgba(217, 178, 51, 0.16); color: var(--dorado); }
+.cargo-info { flex: 1; min-width: 0; }
+.cargo-nombre { color: var(--texto-blanco); font-weight: 700; font-size: 0.98rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cargo-detalle { color: var(--texto-gris); font-size: 0.82rem; margin-top: 3px; }
+.cargo-obs { color: var(--dorado); font-size: 0.82rem; margin-top: 4px; }
+.cargo-chip { flex-shrink: 0; padding: 4px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+.cargo-chip-ok { background: rgba(77, 255, 136, 0.12); color: var(--verde-ok); }
+html.tema-claro .cargo-chip-ok { background: rgba(30, 158, 85, 0.1); color: #1e9e55; }
+.cargo-chip-obs { background: rgba(217, 178, 51, 0.15); color: var(--dorado); }
+.cargo-chip-pend { background: rgba(255,255,255,0.06); color: var(--texto-gris); }
+html.tema-claro .cargo-chip-pend { background: var(--c-suave); }
+
+@media (max-width: 480px) {
+    .cargo-chip { display: none; }
+    .epp-botones { flex-direction: column; }
+}
+@media (min-width: 900px) {
+    #lista-control-cargo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    #lista-control-cargo .estado-vacio { grid-column: 1 / -1; }
+}

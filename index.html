@@ -122,6 +122,7 @@
             <li class="nav-item req-perm-mapa" onclick="switchView('mapa', this)"><i class="fa-solid fa-map-location-dot"></i> Mapa Operacional</li>
             <li class="nav-item req-perm-estadisticas" onclick="switchView('estadisticas', this)"><i class="fa-solid fa-chart-pie"></i> Estadísticas Operativas</li>
             <li class="nav-item req-perm-personal" onclick="switchView('personal', this)"><i class="fa-solid fa-address-card"></i> Fichas de Personal</li>
+            <li class="nav-item req-perm-editar_epp" onclick="switchView('control-cargo', this)"><i class="fa-solid fa-clipboard-check"></i> Control de Cargo</li>
             <li class="nav-item req-perm-material" onclick="switchView('inventario', this)"><i class="fa-solid fa-truck-fast"></i> Material Mayor</li>
             <li class="nav-item req-perm-exportar" onclick="switchView('exportacion', this)"><i class="fa-solid fa-file-excel"></i> Exportar Reportes</li>
             <li class="nav-item req-perm-oficios" onclick="switchView('oficios-vista', this)"><i class="fa-solid fa-file-signature"></i> Archivo de Oficios</li>
@@ -382,6 +383,48 @@
             <div id="lista-oficios" class="list-container"></div>
         </section>
 
+        <section id="control-cargo" class="view-section req-perm-editar_epp">
+            <div class="header-section">
+                <h2 class="title-header">Control de Cargo</h2>
+                <p style="color: var(--texto-gris); margin-top: 5px;">Revisa el equipo de cada bombero y lleva la cuenta de quiénes faltan.</p>
+            </div>
+
+            <div class="glass-panel cargo-resumen">
+                <div class="cargo-resumen-cifras">
+                    <div>
+                        <div class="cargo-cifra"><span id="cargo-revisados">0</span><span class="cargo-cifra-total"> / <span id="cargo-total">0</span></span></div>
+                        <div class="cargo-cifra-label">bomberos revisados</div>
+                    </div>
+                    <div class="cargo-porcentaje" id="cargo-porcentaje">0%</div>
+                </div>
+                <div class="cargo-barra"><div id="cargo-barra-relleno" class="cargo-barra-relleno"></div></div>
+                <div class="cargo-mini">
+                    <span><span class="cargo-punto" style="background: var(--verde-ok);"></span> <b id="cargo-n-conforme">0</b> conformes</span>
+                    <span><span class="cargo-punto" style="background: var(--dorado);"></span> <b id="cargo-n-obs">0</b> con observaciones</span>
+                    <span><span class="cargo-punto" style="background: var(--texto-gris);"></span> <b id="cargo-n-pend">0</b> pendientes</span>
+                </div>
+                <p id="cargo-ciclo-texto" class="cargo-ciclo"></p>
+                <div class="cargo-acciones">
+                    <button class="btn-secundary req-perm-exportar" onclick="exportarEquipoPersonal()"><i class="fa-solid fa-file-excel"></i> Exportar a Excel</button>
+                    <button class="btn-text" onclick="iniciarNuevaRevisionCargo()"><i class="fa-solid fa-rotate"></i> Iniciar nueva revisión</button>
+                </div>
+            </div>
+
+            <div class="hist-herramientas">
+                <div class="hist-buscar">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="search" id="cargo-busqueda" class="input-glass" placeholder="Buscar bombero" oninput="cargarControlCargo()" autocomplete="off">
+                </div>
+                <div class="hist-filtros">
+                    <button class="hist-filtro cargo-filtro activo" data-filtro="pendientes" onclick="cambiarFiltroCargo(this)">Pendientes</button>
+                    <button class="hist-filtro cargo-filtro" data-filtro="revisados" onclick="cambiarFiltroCargo(this)"><i class="fa-solid fa-check"></i> Revisados</button>
+                    <button class="hist-filtro cargo-filtro" data-filtro="obs" onclick="cambiarFiltroCargo(this)"><i class="fa-solid fa-triangle-exclamation"></i> Con observaciones</button>
+                    <button class="hist-filtro cargo-filtro" data-filtro="todos" onclick="cambiarFiltroCargo(this)">Todos</button>
+                </div>
+            </div>
+            <div id="lista-control-cargo" class="list-container"></div>
+        </section>
+
         <section id="oficiales-vista" class="view-section req-perm-gestionar_oficiales">
             <div class="header-section">
                 <h2 class="title-header">Gestión de Oficiales</h2>
@@ -393,7 +436,10 @@
                 <button id="btn-migrar" class="btn-primary" style="width: 100%;" onclick="migrarOficiales()"><i class="fa-solid fa-arrows-rotate"></i> Migrar oficiales</button>
                 <p id="txt-migracion" style="color: var(--dorado); font-size: 0.85rem; text-align: center; margin-top: 10px; min-height: 1em;"></p>
             </div>
-            <button class="btn-primary" style="width: 100%; margin-bottom: 20px;" onclick="abrirEditorOficial()"><i class="fa-solid fa-user-plus"></i> Nuevo Oficial</button>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                <button class="btn-primary" style="flex: 1; min-width: 180px;" onclick="abrirEditorOficial()"><i class="fa-solid fa-user-plus"></i> Nuevo Oficial</button>
+                <button class="btn-secundary" style="flex: 1; min-width: 180px;" onclick="abrirEditorOficial(null, 'escritorio')"><i class="fa-solid fa-desktop"></i> Sesión de escritorio</button>
+            </div>
             <div id="lista-oficiales" class="list-container"></div>
         </section>
 
@@ -694,11 +740,26 @@
                 <span class="close-btn" onclick="cerrarModal('modal-oficial')"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div class="modal-body">
-                <div class="form-group solo-oficial-normal">
+                <div class="form-group solo-escritorio" style="display: none;">
+                    <p style="color: var(--texto-gris); font-size: 0.88rem; line-height: 1.45; margin-bottom: 14px;">Para un computador compartido, como el de la compañía. No pertenece a una persona: entra con su propio PIN y solo puede hacer lo que marques abajo.</p>
+                    <label>Nombre de la sesión</label>
+                    <input type="text" id="oficial-nombre-escritorio" class="input-glass" placeholder="Ej: PC Compañía" maxlength="40">
+                </div>
+                <div class="form-group solo-escritorio" style="display: none;">
+                    <label>Duración</label>
+                    <select id="oficial-duracion" class="input-glass">
+                        <option value="0" selected>Permanente (no se cierra sola)</option>
+                        <option value="2">Se cierra tras 2 horas sin uso</option>
+                        <option value="8">Se cierra tras 8 horas sin uso</option>
+                        <option value="12">Se cierra tras 12 horas sin uso</option>
+                        <option value="24">Se cierra tras 24 horas sin uso</option>
+                    </select>
+                </div>
+                <div class="form-group solo-oficial-normal solo-persona">
                     <label>Voluntario</label>
                     <select id="oficial-nombre" class="input-glass" onchange="alElegirVoluntarioOficial()"></select>
                 </div>
-                <div class="form-group solo-oficial-normal">
+                <div class="form-group solo-oficial-normal solo-persona">
                     <label>Cargo</label>
                     <input type="text" id="oficial-cargo" class="input-glass" placeholder="Ej: Capitán, Teniente 1°, Secretaria">
                 </div>
@@ -820,67 +881,155 @@
     </div>
 
     <div id="modal-editar-epp" class="modal">
-        <div class="modal-content glass-panel" style="max-width: 500px;">
+        <div class="modal-content glass-panel" style="max-width: 560px;">
             <div class="modal-header">
-                <h2>Editar Equipo Asignado</h2>
+                <div>
+                    <h2>Cargo de Equipo</h2>
+                    <p id="epp-nombre-bombero" style="color: var(--dorado); font-size: 0.9rem; margin-top: 4px;"></p>
+                </div>
                 <span class="close-btn" onclick="cerrarModal('modal-editar-epp')"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div class="modal-body">
-                <h4 style="color: var(--rojo-emergencia); margin-bottom: 15px;"><i class="fa-solid fa-fire-burner"></i> EPP Estructural</h4>
+                <h4 class="epp-seccion" style="color: var(--rojo-emergencia);"><i class="fa-solid fa-fire-burner"></i> EPP Estructural</h4>
                 <div class="form-group">
                     <label>Casco (Código)</label>
                     <input type="text" id="edit-epp-est-casco" class="input-glass" placeholder="Ej: C-14">
                 </div>
-                <div class="form-group" style="display: flex; gap: 10px;">
-                    <div style="flex: 1;">
+                <div class="form-group epp-fila">
+                    <div>
                         <label>Chaqueta</label>
                         <input type="text" id="edit-epp-est-chaqueta" class="input-glass" placeholder="Cod/Talla">
                     </div>
-                    <div style="flex: 1;">
+                    <div>
                         <label>Jardinera</label>
                         <input type="text" id="edit-epp-est-jardinera" class="input-glass" placeholder="Cod/Talla">
                     </div>
                 </div>
-                <div class="form-group" style="display: flex; gap: 10px;">
-                    <div style="flex: 1;">
+                <div class="form-group epp-fila">
+                    <div>
                         <label>Botas</label>
                         <input type="text" id="edit-epp-est-botas" class="input-glass" placeholder="Marca/Talla">
                     </div>
-                    <div style="flex: 1;">
+                    <div>
+                        <label>Tipo de botas</label>
+                        <select id="edit-epp-est-botas-tipo" class="input-glass">
+                            <option value="">Sin especificar</option>
+                            <option value="Cuero">Cuero</option>
+                            <option value="Goma">Goma</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group epp-fila">
+                    <div>
                         <label>Guantes</label>
                         <input type="text" id="edit-epp-est-guantes" class="input-glass" placeholder="Marca/Talla">
                     </div>
-                </div>
-                <div class="form-group">
-                    <label>Esclavina</label>
-                    <select id="edit-epp-est-esclavina" class="input-glass">
-                        <option value="Sí">Sí</option>
-                        <option value="No">No</option>
-                    </select>
+                    <div>
+                        <label>Esclavina</label>
+                        <select id="edit-epp-est-esclavina" class="input-glass">
+                            <option value="Sí">Sí</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
                 </div>
 
-                <h4 style="color: var(--verde-ok); margin-top: 25px; margin-bottom: 15px;"><i class="fa-solid fa-tree"></i> EPP Multirol</h4>
+                <h4 class="epp-seccion" style="color: var(--verde-ok);"><i class="fa-solid fa-tree"></i> EPP Multirol</h4>
                 <div class="form-group">
                     <label>Casco (Código)</label>
                     <input type="text" id="edit-epp-mul-casco" class="input-glass" placeholder="Ej: CM-14">
                 </div>
-                <div class="form-group" style="display: flex; gap: 10px;">
-                    <div style="flex: 1;">
+                <div class="form-group epp-fila">
+                    <div>
                         <label>Chaqueta</label>
                         <input type="text" id="edit-epp-mul-chaqueta" class="input-glass" placeholder="Cod/Talla">
                     </div>
-                    <div style="flex: 1;">
+                    <div>
                         <label>Pantalón</label>
                         <input type="text" id="edit-epp-mul-pantalon" class="input-glass" placeholder="Cod/Talla">
                     </div>
                 </div>
-                <div class="form-group">
-                    <label>Botas (Marca/Talla)</label>
-                    <input type="text" id="edit-epp-mul-botas" class="input-glass" placeholder="Marca/Talla">
+                <div class="form-group epp-fila">
+                    <div>
+                        <label>Botas</label>
+                        <input type="text" id="edit-epp-mul-botas" class="input-glass" placeholder="Marca/Talla">
+                    </div>
+                    <div>
+                        <label>Tipo de botas</label>
+                        <select id="edit-epp-mul-botas-tipo" class="input-glass">
+                            <option value="">Sin especificar</option>
+                            <option value="Cuero">Cuero</option>
+                            <option value="Goma">Goma</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div class="modal-footer-spacing">
-                    <button class="btn-primary" style="width: 100%; margin-top: 15px;" onclick="guardarEdicionEPP()"><i class="fa-solid fa-floppy-disk"></i> Guardar Inventario</button>
+                <h4 class="epp-seccion" style="color: var(--dorado);"><i class="fa-solid fa-shirt"></i> Uniformes</h4>
+                <div class="form-group epp-fila">
+                    <div>
+                        <label>Uniforme de parada</label>
+                        <input type="text" id="edit-uni-parada" class="input-glass" placeholder="Talla / estado">
+                    </div>
+                    <div>
+                        <label>Uniforme de cuartel</label>
+                        <input type="text" id="edit-uni-cuartel" class="input-glass" placeholder="Talla / estado">
+                    </div>
+                </div>
+
+                <h4 class="epp-seccion" style="color: #7fb2ff;"><i class="fa-solid fa-walkie-talkie"></i> Linterna y Radio</h4>
+                <div class="form-group">
+                    <label>Linterna</label>
+                    <input type="text" id="edit-acc-linterna" class="input-glass" placeholder="Marca/Modelo (vacío si no tiene)">
+                </div>
+                <div class="form-group">
+                    <label>Radio</label>
+                    <select id="edit-acc-radio" class="input-glass" onchange="alCambiarRadioEPP()">
+                        <option value="">No tiene</option>
+                        <option value="Propia">Propia</option>
+                        <option value="De la compañía">De la compañía</option>
+                    </select>
+                </div>
+                <div id="epp-radio-detalle">
+                    <div class="form-group epp-fila">
+                        <div>
+                            <label>Marca</label>
+                            <input type="text" id="edit-acc-radio-marca" class="input-glass" placeholder="Ej: Motorola">
+                        </div>
+                        <div>
+                            <label>Modelo</label>
+                            <input type="text" id="edit-acc-radio-modelo" class="input-glass" placeholder="Ej: DEP450">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>N° de serie</label>
+                        <input type="text" id="edit-acc-radio-serie" class="input-glass" placeholder="Opcional">
+                    </div>
+                </div>
+
+                <div class="epp-revision">
+                    <h4 class="epp-seccion" style="margin-top: 0;"><i class="fa-solid fa-clipboard-check" style="color: var(--dorado);"></i> Revisión del cargo</h4>
+                    <p id="epp-ultima-revision" class="epp-ultima-revision"></p>
+                    <div class="form-group epp-fila">
+                        <div>
+                            <label>Revisado por</label>
+                            <select id="edit-rev-revisor" class="input-glass"></select>
+                        </div>
+                        <div>
+                            <label>Resultado</label>
+                            <select id="edit-rev-estado" class="input-glass">
+                                <option value="Conforme">Conforme</option>
+                                <option value="Con observaciones">Con observaciones</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Observaciones</label>
+                        <textarea id="edit-rev-obs" class="input-glass" rows="2" placeholder="Ej: falta esclavina, chaqueta con desgaste"></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer-spacing epp-botones">
+                    <button class="btn-secundary" onclick="guardarEdicionEPP(false)"><i class="fa-solid fa-floppy-disk"></i> Solo guardar</button>
+                    <button class="btn-primary" onclick="guardarEdicionEPP(true)"><i class="fa-solid fa-clipboard-check"></i> Guardar y marcar revisado</button>
                 </div>
             </div>
         </div>

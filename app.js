@@ -236,7 +236,8 @@ async function iniciarSesionConCuenta(pin) {
     try { perfil = await getDoc(doc(dbCloud, "oficiales", cred.user.uid)); } catch (e) {}
     if (!perfil || !perfil.exists() || perfil.data().activo === false) { await signOut(authCloud); return null; }
     const o = perfil.data();
-    return { uid: cred.user.uid, id: cred.user.uid, esMaestro: o.maestro === true, nombre: o.nombre, cargo: o.cargo, permisos: o.permisos || [] };
+    return { uid: cred.user.uid, id: cred.user.uid, esMaestro: o.maestro === true, nombre: o.nombre, cargo: o.cargo, permisos: o.permisos || [],
+             tipo: o.tipo || "oficial", duracionHoras: o.tipo === "escritorio" ? (o.duracionHoras ?? 12) : null };
 }
 
 // Solo sirve antes de migrar: compara contra los PIN que todavía estén guardados en la base.
@@ -253,10 +254,27 @@ async function iniciarSesionLegado(pin) {
     return null;
 }
 
+// Oficiales: 30 minutos desde que entran. Sesión de escritorio: las horas elegidas, renovadas con cada uso.
+// duracionHoras = 0 en una sesión de escritorio significa permanente: solo se cierra a mano o si la desactivas
+function duracionSesionMs(sesion) {
+    if (sesion && sesion.tipo === "escritorio") {
+        return sesion.duracionHoras === 0 ? 10 * 365 * 24 * 3600000 : (sesion.duracionHoras || 12) * 3600000;
+    }
+    return 30 * 60 * 1000;
+}
+const textoDuracionEscritorio = (h) => h === 0 ? "permanente (no se cierra sola)" : `se cierra tras ${h || 12} h sin uso`;
 function guardarSesion(sesion) {
-    localStorage.setItem("sigo_oficial_exp", Date.now() + (30 * 60 * 1000));
+    localStorage.setItem("sigo_oficial_exp", Date.now() + duracionSesionMs(sesion));
     localStorage.setItem("sigo_sesion", JSON.stringify(sesion));
 }
+
+// En una sesión de escritorio, usar la app la mantiene abierta (como máximo se revisa una vez por minuto)
+["pointerdown", "keydown"].forEach(evento => document.addEventListener(evento, () => {
+    const s = obtenerSesion();
+    if (!s || s.tipo !== "escritorio") return;
+    const nuevo = Date.now() + duracionSesionMs(s);
+    if (nuevo - parseInt(localStorage.getItem("sigo_oficial_exp") || "0") > 60000) localStorage.setItem("sigo_oficial_exp", nuevo);
+}, { passive: true, capture: true }));
 
 function aplicarPermisos() {
     const sesion = obtenerSesion();
@@ -304,9 +322,13 @@ function aplicarPermisos() {
 setInterval(async () => {
     const exp = localStorage.getItem("sigo_oficial_exp");
     if (exp && Date.now() > parseInt(exp)) {
+        let anterior = null;
+        try { anterior = JSON.parse(localStorage.getItem("sigo_sesion") || "null"); } catch (e) {}
         await cerrarSesionOficial();
         aplicarPermisos();
-        await alert("🔒 La sesión de oficial ha caducado por inactividad (30 minutos).");
+        await alert(anterior && anterior.tipo === "escritorio"
+            ? `🔒 La sesión de escritorio se cerró tras ${anterior.duracionHoras || 12} horas sin uso.`
+            : "🔒 La sesión de oficial ha caducado (30 minutos).");
         location.reload();
     }
 }, 30000);
@@ -364,8 +386,14 @@ async function verificarAdminPin() {
             cerrarPadAdmin();
             aplicarPermisos();
             suscribirColeccionesProtegidas();
-            const quien = sesion.esMaestro ? "Modo Ayudante" : `Bienvenido/a ${sesion.cargo} ${sesion.nombre.split(" ")[0]}`;
-            alert(`✅ ${quien}. Sesión activa por 30 minutos.`);
+            if (sesion.tipo === "escritorio") {
+                alert(sesion.duracionHoras === 0
+                    ? `✅ ${sesion.nombre} abierta. Queda abierta en este computador hasta que cierres la sesión.`
+                    : `✅ ${sesion.nombre} abierta. Se cierra sola tras ${sesion.duracionHoras} h sin uso.`);
+            } else {
+                const quien = sesion.esMaestro ? "Modo Ayudante" : `Bienvenido/a ${sesion.cargo} ${sesion.nombre.split(" ")[0]}`;
+                alert(`✅ ${quien}. Sesión activa por 30 minutos.`);
+            }
         } else {
             falloPin();
         }
@@ -619,6 +647,7 @@ function conectarRadioEnTiempoReal() {
         });
         if(document.getElementById('personal').classList.contains('active')) cargarRankingPersonal();
         if(document.getElementById('solicitar-licencia').classList.contains('active')) prepararFormLicencia();
+        if(document.getElementById('control-cargo').classList.contains('active')) cargarControlCargo();
     });
 
 }
@@ -663,6 +692,13 @@ function suscribirColeccionesProtegidas() {
         }, avisarError("licencias")));
     }
 
+    if (tienePermiso("editar_epp") || tienePermiso("personal") || tienePermiso("exportar")) {
+        s(onSnapshot(doc(dbCloud, "control_cargo", "ciclo"), (d) => {
+            CICLO_CARGO = d.exists() ? d.data() : { inicio: 0 };
+            if (document.getElementById('control-cargo').classList.contains('active')) cargarControlCargo();
+        }, avisarError("control de cargo")));
+    }
+
     if (tienePermiso("gestionar_oficiales")) {
         s(onSnapshot(collection(dbCloud, "oficiales"), (snapshot) => {
             MEMORIA_OFICIALES = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -692,6 +728,9 @@ function suscribirColeccionesProtegidas() {
             actual.permisos = o.permisos || [];
             actual.esMaestro = o.maestro === true;
             actual.cargo = o.cargo; actual.nombre = o.nombre;
+            actual.tipo = o.tipo || "oficial";
+            actual.duracionHoras = o.tipo === "escritorio" ? (o.duracionHoras ?? 12) : null;
+            if (o.tipo === "escritorio") localStorage.setItem("sigo_oficial_exp", Date.now() + duracionSesionMs(actual));
             localStorage.setItem("sigo_sesion", JSON.stringify(actual));
             if (antes !== JSON.stringify([actual.permisos, actual.esMaestro])) {
                 aplicarPermisos();
@@ -726,6 +765,7 @@ window.switchView = function(viewId, element) {
     if (viewId === 'oficiales-vista') cargarListaOficiales();
     if (viewId === 'solicitar-licencia') prepararFormLicencia();
     if (viewId === 'oficios-vista') cargarListaOficios();
+    if (viewId === 'control-cargo') cargarControlCargo();
 }
 
 // Gestos táctiles: deslizar a la derecha abre el menú, a la izquierda lo cierra
@@ -2264,52 +2304,7 @@ function renderizarFichaPersonal(nombre, periodo) {
         </div>
 
         <div id="vista-equipo" style="display:none;">
-            <h4 style="color: var(--rojo-emergencia); margin-bottom: 10px;"><i class="fa-solid fa-fire-burner"></i> EPP Estructural</h4>
-            <div class="card-item" style="padding: 16px; margin-bottom: 20px; border-left: 3px solid var(--rojo-emergencia);">
-                <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.95rem;">
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Casco (Código):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.casco || 'No Registrado'}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Chaqueta (Cod/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.chaqueta || 'No Registrado'}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Jardinera (Cod/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.jardinera || 'No Registrado'}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Botas (Marca/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.botas || 'No Registrado'}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Guantes (Marca/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.guantes || 'No Registrado'}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: var(--texto-gris);">Esclavina (Sí/No):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppEstructural?.esclavina || 'No Registrado'}</span>
-                    </div>
-                </div>
-            </div>
-
-            <h4 style="color: var(--verde-ok); margin-bottom: 10px;"><i class="fa-solid fa-tree"></i> EPP Multirol</h4>
-            <div class="card-item" style="padding: 16px; border-left: 3px solid var(--verde-ok);">
-                <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.95rem;">
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Casco (Código):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppMultirol?.casco || 'No Registrado'}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Chaqueta (Cod/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppMultirol?.chaqueta || 'No Registrado'}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px;">
-                        <span style="color: var(--texto-gris);">Pantalón (Cod/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppMultirol?.pantalon || 'No Registrado'}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: var(--texto-gris);">Botas (Marca/Talla):</span> <span style="font-weight: 600; color: var(--texto-blanco);">${b.eppMultirol?.botas || 'No Registrado'}</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="req-perm-editar_epp" style="margin-top: 20px; text-align: center;">
-                <button class="btn-secundary" style="width: 100%; color: var(--dorado); border-color: var(--dorado);" onclick="abrirEdicionEPP('${b.nombre}')"><i class="fa-solid fa-pen-to-square"></i> Asignar / Editar EPP</button>
-            </div>
-            
+            ${htmlEquipoFicha(b)}
         </div>
     `;
 }
@@ -2787,35 +2782,66 @@ window.exportarCSV = function() {
 window.exportarEquipoPersonal = function() {
     if (!tienePermiso("exportar")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const bomberos = MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial;
-
     if (bomberos.length === 0) { alert("No hay personal registrado para exportar."); return; }
 
-    const fila1 = ["N°", "Nombre Completo", "Cargo", "ESTRUCTURAL", "", "", "", "", "", "MULTIROL", "", "", ""];
-    const fila2 = ["", "", "", "Casco", "Chaqueta", "Jardinera", "Botas", "Guantes", "Esclavina", "Casco", "Chaqueta", "Pantalón", "Botas"];
+    // Grupos de columnas: el título va combinado sobre sus columnas en la primera fila
+    const grupos = [
+        { titulo: "", columnas: ["N°", "Nombre Completo", "Cargo"] },
+        { titulo: "ESTRUCTURAL", columnas: ["Casco", "Chaqueta", "Jardinera", "Botas", "Tipo botas", "Guantes", "Esclavina"] },
+        { titulo: "MULTIROL", columnas: ["Casco", "Chaqueta", "Pantalón", "Botas", "Tipo botas"] },
+        { titulo: "UNIFORMES", columnas: ["Parada", "Cuartel"] },
+        { titulo: "LINTERNA Y RADIO", columnas: ["Linterna", "Radio", "Marca radio", "Modelo radio", "N° serie"] },
+        { titulo: "REVISIÓN DE CARGO", columnas: ["Estado", "Fecha", "Revisado por", "Observaciones"] }
+    ];
+    const fila1 = [], fila2 = [], merges = [];
+    let col = 0;
+    grupos.forEach(g => {
+        g.columnas.forEach((c, k) => { fila1.push(k === 0 ? g.titulo : ""); fila2.push(c); });
+        if (g.titulo) merges.push({ s: { r: 0, c: col }, e: { r: 0, c: col + g.columnas.length - 1 } });
+        else g.columnas.forEach((_, k) => merges.push({ s: { r: 0, c: col + k }, e: { r: 1, c: col + k } }));
+        col += g.columnas.length;
+    });
+    // En las columnas de N°, nombre y cargo el título va en la celda combinada
+    fila1[0] = "N°"; fila1[1] = "Nombre Completo"; fila1[2] = "Cargo";
 
+    const d = (v) => v || "-";
     const filasDatos = bomberos.map((b, index) => {
-        const est = b.eppEstructural || {};
-        const mul = b.eppMultirol || {};
+        const est = b.eppEstructural || {}, mul = b.eppMultirol || {}, uni = b.uniformes || {}, acc = b.accesorios || {};
+        const estado = estadoCargo(b), rev = b.revisionCargo || {};
+        const revisado = estado !== "pend";
         return [
             index + 1, b.nombre, b.cargo,
-            est.casco || "-", est.chaqueta || "-", est.jardinera || "-", est.botas || "-", est.guantes || "-", est.esclavina || "-",
-            mul.casco || "-", mul.chaqueta || "-", mul.pantalon || "-", mul.botas || "-"
+            d(est.casco), d(est.chaqueta), d(est.jardinera), d(est.botas), d(est.botasTipo), d(est.guantes), d(est.esclavina),
+            d(mul.casco), d(mul.chaqueta), d(mul.pantalon), d(mul.botas), d(mul.botasTipo),
+            d(uni.parada), d(uni.cuartel),
+            d(acc.linterna), acc.radio || "No tiene", d(acc.radioMarca), d(acc.radioModelo), d(acc.radioSerie),
+            ETIQUETA_ESTADO_CARGO[estado], revisado ? fechaCL(rev.fecha) : "-", revisado ? d(rev.revisor) : "-", revisado ? d(rev.observaciones) : "-"
         ];
     });
 
     const hoja = XLSX.utils.aoa_to_sheet([fila1, fila2, ...filasDatos]);
-    hoja["!merges"] = [
-        { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
-        { s: { r: 0, c: 1 }, e: { r: 1, c: 1 } },
-        { s: { r: 0, c: 2 }, e: { r: 1, c: 2 } },
-        { s: { r: 0, c: 3 }, e: { r: 0, c: 8 } },
-        { s: { r: 0, c: 9 }, e: { r: 0, c: 12 } }
-    ];
-    hoja["!cols"] = [{ wch: 5 }, { wch: 32 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
+    hoja["!merges"] = merges;
+    hoja["!cols"] = fila2.map((c, k) => ({ wch: k === 0 ? 5 : k === 1 ? 32 : k === 2 ? 20 : c === "Observaciones" ? 36 : c === "Revisado por" ? 26 : 12 }));
+
+    // Hoja aparte con el avance de la revisión, para mostrarlo rápido
+    const n = { ok: 0, obs: 0, pend: 0 };
+    bomberos.forEach(b => n[estadoCargo(b)]++);
+    const resumen = XLSX.utils.aoa_to_sheet([
+        ["Control de Cargo · Tercera Compañía"],
+        [CICLO_CARGO.inicio ? `Revisión iniciada el ${fechaCL(CICLO_CARGO.inicio)}` : "Todas las revisiones registradas"],
+        [],
+        ["Estado", "Cantidad"],
+        ["Conforme", n.ok], ["Con observaciones", n.obs], ["Pendiente", n.pend], ["Total", bomberos.length],
+        [],
+        ["Pendientes de revisión"],
+        ...bomberos.filter(b => estadoCargo(b) === "pend").map(b => [b.nombre, b.cargo])
+    ]);
+    resumen["!cols"] = [{ wch: 34 }, { wch: 22 }];
 
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, "Equipo Personal");
-    XLSX.writeFile(libro, `Registro_Equipo_Personal_3ra_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.utils.book_append_sheet(libro, resumen, "Avance revisión");
+    XLSX.writeFile(libro, `Control_Cargo_3ra_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 window.exportarInventarioUnidades = function() {
@@ -2883,71 +2909,289 @@ mainContent.addEventListener('scroll', () => {
 // ==========================================
 // 14. EDICIÓN DE EPP (INVENTARIO PERSONAL)
 // ==========================================
-let bomberoEditandoEPP = null;
+let bomberoEditandoEPP = null;      // id del documento (puede faltar si el voluntario aún no está en la nube)
+let nombreEditandoEPP = null;
+
+// ---------- Estado de revisión del cargo ----------
+// Un "ciclo" de revisión parte en una fecha; quien fue revisado después de esa fecha cuenta como revisado.
+let CICLO_CARGO = { inicio: 0 };
+
+function estadoCargo(b) {
+    const rev = b && b.revisionCargo;
+    if (rev && rev.fecha && rev.fecha >= (CICLO_CARGO.inicio || 0)) return rev.estado === "Con observaciones" ? "obs" : "ok";
+    return "pend";
+}
+const ETIQUETA_ESTADO_CARGO = { ok: "Conforme", obs: "Con observaciones", pend: "Pendiente" };
+
+function fechaCorta(ms) {
+    return new Date(ms).toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function filaEquipo(etiqueta, valor, ultima = false) {
+    const vacio = !valor || valor === "-";
+    return `<div class="equipo-fila${ultima ? " ultima" : ""}">
+                <span class="equipo-etiqueta">${etiqueta}</span>
+                <span class="equipo-valor${vacio ? " vacio" : ""}">${vacio ? "No registrado" : htmlSeguro(valor)}</span>
+            </div>`;
+}
+
+function textoBotas(botas, tipo) {
+    if (!botas && !tipo) return "";
+    return [botas, tipo ? `(${tipo})` : ""].filter(Boolean).join(" ");
+}
+
+function textoRadio(acc) {
+    if (!acc || !acc.radio) return "";
+    const detalle = [acc.radioMarca, acc.radioModelo].filter(Boolean).join(" ");
+    return `${acc.radio}${detalle ? " · " + detalle : ""}${acc.radioSerie ? " · S/N " + acc.radioSerie : ""}`;
+}
+
+function htmlEquipoFicha(b) {
+    const est = b.eppEstructural || {}, mul = b.eppMultirol || {}, uni = b.uniformes || {}, acc = b.accesorios || {};
+    const estado = estadoCargo(b);
+    const rev = b.revisionCargo;
+    const lineaRevision = estado === "pend"
+        ? `<i class="fa-regular fa-clock"></i> Revisión pendiente${rev && rev.fecha ? ` · la última fue el ${fechaCorta(rev.fecha)}` : ""}`
+        : `<i class="fa-solid ${estado === "ok" ? "fa-circle-check" : "fa-triangle-exclamation"}"></i> ${ETIQUETA_ESTADO_CARGO[estado]} · revisado el ${fechaCorta(rev.fecha)}${rev.revisor ? ` por ${htmlSeguro(rev.revisor)}` : ""}`;
+
+    return `
+        <div class="cargo-estado-ficha cargo-estado-${estado}"><div>${lineaRevision}</div>${estado === "obs" && rev.observaciones ? `<div class="cargo-obs-ficha">${htmlSeguro(rev.observaciones)}</div>` : ""}</div>
+
+        <h4 style="color: var(--rojo-emergencia); margin-bottom: 10px;"><i class="fa-solid fa-fire-burner"></i> EPP Estructural</h4>
+        <div class="card-item equipo-card" style="border-left: 3px solid var(--rojo-emergencia);">
+            ${filaEquipo("Casco (Código):", est.casco)}
+            ${filaEquipo("Chaqueta (Cod/Talla):", est.chaqueta)}
+            ${filaEquipo("Jardinera (Cod/Talla):", est.jardinera)}
+            ${filaEquipo("Botas:", textoBotas(est.botas, est.botasTipo))}
+            ${filaEquipo("Guantes (Marca/Talla):", est.guantes)}
+            ${filaEquipo("Esclavina (Sí/No):", est.esclavina, true)}
+        </div>
+
+        <h4 style="color: var(--verde-ok); margin-bottom: 10px;"><i class="fa-solid fa-tree"></i> EPP Multirol</h4>
+        <div class="card-item equipo-card" style="border-left: 3px solid var(--verde-ok);">
+            ${filaEquipo("Casco (Código):", mul.casco)}
+            ${filaEquipo("Chaqueta (Cod/Talla):", mul.chaqueta)}
+            ${filaEquipo("Pantalón (Cod/Talla):", mul.pantalon)}
+            ${filaEquipo("Botas:", textoBotas(mul.botas, mul.botasTipo), true)}
+        </div>
+
+        <h4 style="color: var(--dorado); margin-bottom: 10px;"><i class="fa-solid fa-shirt"></i> Uniformes</h4>
+        <div class="card-item equipo-card" style="border-left: 3px solid var(--dorado);">
+            ${filaEquipo("Uniforme de parada:", uni.parada)}
+            ${filaEquipo("Uniforme de cuartel:", uni.cuartel, true)}
+        </div>
+
+        <h4 style="color: #7fb2ff; margin-bottom: 10px;"><i class="fa-solid fa-walkie-talkie"></i> Linterna y Radio</h4>
+        <div class="card-item equipo-card" style="border-left: 3px solid #7fb2ff;">
+            ${filaEquipo("Linterna:", acc.linterna)}
+            ${filaEquipo("Radio:", textoRadio(acc), true)}
+        </div>
+
+        <div class="req-perm-editar_epp" style="margin-top: 20px; text-align: center;">
+            <button class="btn-secundary" style="width: 100%; color: var(--dorado); border-color: var(--dorado);" onclick="abrirEdicionEPP('${htmlSeguro(b.nombre)}')"><i class="fa-solid fa-pen-to-square"></i> Editar / Revisar cargo</button>
+        </div>`;
+}
+
+window.alCambiarRadioEPP = function() {
+    document.getElementById("epp-radio-detalle").style.display = document.getElementById("edit-acc-radio").value ? "block" : "none";
+}
+
+function opcionesRevisor(seleccionado) {
+    const bomberos = MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial;
+    const sel = document.getElementById("edit-rev-revisor");
+    sel.innerHTML = `<option value="">-- Quién revisa --</option>` +
+        bomberos.map(b => `<option value="${htmlSeguro(b.nombre)}">${htmlSeguro(b.nombre)}</option>`).join("");
+    sel.value = bomberos.some(b => b.nombre === seleccionado) ? seleccionado : "";
+}
 
 window.abrirEdicionEPP = function(nombre) {
     if (!tienePermiso("editar_epp")) { alert("🔒 No tienes permiso para esta acción."); return; }
-    const b = MEMORIA_BOMBEROS.find(bombero => bombero.nombre === nombre);
-    if (!b || !b.id) {
-        alert("Sincronizando con la nube... Cierra la ficha e intenta de nuevo en unos segundos.");
-        return;
-    }
-    bomberoEditandoEPP = b.id;
+    const bomberos = MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial;
+    const b = bomberos.find(x => x.nombre === nombre);
+    if (!b) return;
+    bomberoEditandoEPP = b.id || null;
+    nombreEditandoEPP = b.nombre;
 
-    // Llenar datos previos si existen (EPP Estructural)
-    document.getElementById("edit-epp-est-casco").value = b.eppEstructural?.casco || "";
-    document.getElementById("edit-epp-est-chaqueta").value = b.eppEstructural?.chaqueta || "";
-    document.getElementById("edit-epp-est-jardinera").value = b.eppEstructural?.jardinera || "";
-    document.getElementById("edit-epp-est-botas").value = b.eppEstructural?.botas || "";
-    document.getElementById("edit-epp-est-guantes").value = b.eppEstructural?.guantes || "";
-    document.getElementById("edit-epp-est-esclavina").value = b.eppEstructural?.esclavina || "No";
+    const est = b.eppEstructural || {}, mul = b.eppMultirol || {}, uni = b.uniformes || {}, acc = b.accesorios || {};
+    const v = (id, valor) => document.getElementById(id).value = valor || "";
+    document.getElementById("epp-nombre-bombero").innerText = `${b.nombre} · ${b.cargo}`;
 
-    // Llenar datos previos si existen (EPP Multirol)
-    document.getElementById("edit-epp-mul-casco").value = b.eppMultirol?.casco || "";
-    document.getElementById("edit-epp-mul-chaqueta").value = b.eppMultirol?.chaqueta || "";
-    document.getElementById("edit-epp-mul-pantalon").value = b.eppMultirol?.pantalon || "";
-    document.getElementById("edit-epp-mul-botas").value = b.eppMultirol?.botas || "";
+    v("edit-epp-est-casco", est.casco); v("edit-epp-est-chaqueta", est.chaqueta); v("edit-epp-est-jardinera", est.jardinera);
+    v("edit-epp-est-botas", est.botas); v("edit-epp-est-botas-tipo", est.botasTipo); v("edit-epp-est-guantes", est.guantes);
+    document.getElementById("edit-epp-est-esclavina").value = est.esclavina || "No";
+
+    v("edit-epp-mul-casco", mul.casco); v("edit-epp-mul-chaqueta", mul.chaqueta); v("edit-epp-mul-pantalon", mul.pantalon);
+    v("edit-epp-mul-botas", mul.botas); v("edit-epp-mul-botas-tipo", mul.botasTipo);
+
+    v("edit-uni-parada", uni.parada); v("edit-uni-cuartel", uni.cuartel);
+    v("edit-acc-linterna", acc.linterna); v("edit-acc-radio", acc.radio);
+    v("edit-acc-radio-marca", acc.radioMarca); v("edit-acc-radio-modelo", acc.radioModelo); v("edit-acc-radio-serie", acc.radioSerie);
+    alCambiarRadioEPP();
+
+    // Revisión: por defecto revisa quien tiene la sesión abierta (en una sesión de escritorio hay que elegirlo)
+    const sesion = obtenerSesion();
+    const rev = b.revisionCargo;
+    const estado = estadoCargo(b);
+    opcionesRevisor(sesion && sesion.tipo !== "escritorio" ? sesion.nombre : "");
+    document.getElementById("edit-rev-estado").value = estado === "obs" ? "Con observaciones" : "Conforme";
+    document.getElementById("edit-rev-obs").value = estado !== "pend" && rev ? (rev.observaciones || "") : "";
+    document.getElementById("epp-ultima-revision").innerHTML = rev && rev.fecha
+        ? `Última revisión: <b>${fechaCorta(rev.fecha)}</b>${rev.revisor ? ` por ${htmlSeguro(rev.revisor)}` : ""} · ${htmlSeguro(rev.estado || "Conforme")}${estado === "pend" ? " <span style='color: var(--dorado);'>(de una revisión anterior)</span>" : ""}`
+        : "Este bombero todavía no tiene revisiones registradas.";
 
     abrirModal("modal-editar-epp");
 }
 
-window.guardarEdicionEPP = async function() {
+let guardandoEPP = false;
+window.guardarEdicionEPP = async function(marcarRevisado) {
     if (!tienePermiso("editar_epp")) { alert("🔒 No tienes permiso para esta acción."); return; }
-    if (!bomberoEditandoEPP) return;
+    if (!nombreEditandoEPP || guardandoEPP) return;
+    const g = (id) => document.getElementById(id).value.trim();
+    const radio = g("edit-acc-radio");
 
-    const datosEPP = {
+    const datos = {
         eppEstructural: {
-            casco: document.getElementById("edit-epp-est-casco").value.trim(),
-            chaqueta: document.getElementById("edit-epp-est-chaqueta").value.trim(),
-            jardinera: document.getElementById("edit-epp-est-jardinera").value.trim(),
-            botas: document.getElementById("edit-epp-est-botas").value.trim(),
-            guantes: document.getElementById("edit-epp-est-guantes").value.trim(),
-            esclavina: document.getElementById("edit-epp-est-esclavina").value
+            casco: g("edit-epp-est-casco"), chaqueta: g("edit-epp-est-chaqueta"), jardinera: g("edit-epp-est-jardinera"),
+            botas: g("edit-epp-est-botas"), botasTipo: g("edit-epp-est-botas-tipo"), guantes: g("edit-epp-est-guantes"),
+            esclavina: g("edit-epp-est-esclavina")
         },
         eppMultirol: {
-            casco: document.getElementById("edit-epp-mul-casco").value.trim(),
-            chaqueta: document.getElementById("edit-epp-mul-chaqueta").value.trim(),
-            pantalon: document.getElementById("edit-epp-mul-pantalon").value.trim(),
-            botas: document.getElementById("edit-epp-mul-botas").value.trim()
+            casco: g("edit-epp-mul-casco"), chaqueta: g("edit-epp-mul-chaqueta"), pantalon: g("edit-epp-mul-pantalon"),
+            botas: g("edit-epp-mul-botas"), botasTipo: g("edit-epp-mul-botas-tipo")
+        },
+        uniformes: { parada: g("edit-uni-parada"), cuartel: g("edit-uni-cuartel") },
+        accesorios: {
+            linterna: g("edit-acc-linterna"), radio,
+            radioMarca: radio ? g("edit-acc-radio-marca") : "", radioModelo: radio ? g("edit-acc-radio-modelo") : "", radioSerie: radio ? g("edit-acc-radio-serie") : ""
         }
     };
 
+    if (marcarRevisado) {
+        const revisor = g("edit-rev-revisor");
+        if (!revisor) { alert("Elige quién está revisando el cargo."); document.getElementById("edit-rev-revisor").focus(); return; }
+        const estado = g("edit-rev-estado");
+        const observaciones = g("edit-rev-obs");
+        if (estado === "Con observaciones" && !observaciones) { alert("Escribe qué observación tiene el cargo."); document.getElementById("edit-rev-obs").focus(); return; }
+        const revision = { fecha: Date.now(), revisor, estado, observaciones };
+        datos.revisionCargo = revision;
+        datos.historialRevisiones = arrayUnion(revision);
+    }
+
+    guardandoEPP = true;
+    const botones = document.querySelectorAll("#modal-editar-epp .epp-botones button");
+    botones.forEach(bt => { bt.disabled = true; bt.style.opacity = "0.6"; });
     try {
-        await updateDoc(doc(dbCloud, "bomberos", bomberoEditandoEPP), datosEPP);
-        
-        // Actualizamos localmente para no esperar a la red y refrescamos la ficha visual
-        const b = MEMORIA_BOMBEROS.find(bom => bom.id === bomberoEditandoEPP);
-        if(b) {
-            b.eppEstructural = datosEPP.eppEstructural;
-            b.eppMultirol = datosEPP.eppMultirol;
+        if (bomberoEditandoEPP) {
+            await updateDoc(doc(dbCloud, "bomberos", bomberoEditandoEPP), datos);
+        } else {
+            // Voluntario de la nómina que todavía no estaba en la nube: se crea su ficha
+            const base = DatosClaves.nominaOficial.find(n => n.nombre === nombreEditandoEPP) || { nombre: nombreEditandoEPP, cargo: "" };
+            const nuevo = await addDoc(collection(dbCloud, "bomberos"), { nombre: base.nombre, cargo: base.cargo, grado: "Voluntario", ...datos, historialRevisiones: datos.revisionCargo ? [datos.revisionCargo] : [] });
+            bomberoEditandoEPP = nuevo.id;
         }
-        renderizarFichaPersonal(bomberoFichaActual, document.getElementById("filtro-mes-ficha").value);
-        
-        alert("Inventario de equipo actualizado y guardado en la nube correctamente.");
+
+        // Se refleja al instante sin esperar a la nube
+        const b = MEMORIA_BOMBEROS.find(bom => bom.nombre === nombreEditandoEPP);
+        if (b) {
+            Object.assign(b, { eppEstructural: datos.eppEstructural, eppMultirol: datos.eppMultirol, uniformes: datos.uniformes, accesorios: datos.accesorios });
+            if (datos.revisionCargo) b.revisionCargo = datos.revisionCargo;
+            if (!b.id) b.id = bomberoEditandoEPP;
+        }
+        if (bomberoFichaActual === nombreEditandoEPP && document.getElementById("modal-ficha-personal")?.style.display === "block") {
+            renderizarFichaPersonal(bomberoFichaActual, document.getElementById("filtro-mes-ficha").value);
+            cambiarPestanaFicha('equipo');
+        }
+        if (document.getElementById("control-cargo").classList.contains("active")) cargarControlCargo();
+
         cerrarModal("modal-editar-epp");
+        alert(marcarRevisado ? `✅ Cargo de ${nombreEditandoEPP.split(" ")[0]} revisado y guardado.` : "✅ Equipo guardado correctamente.");
     } catch(e) {
-        alert("Error al guardar el equipo. Revisa tu conexión a internet.");
         console.error(e);
+        alert("Error al guardar el equipo. Revisa tu conexión a internet.");
+    } finally {
+        guardandoEPP = false;
+        botones.forEach(bt => { bt.disabled = false; bt.style.opacity = ""; });
+    }
+}
+
+// ==========================================
+// CONTROL DE CARGO: quiénes ya fueron revisados y quiénes faltan
+// ==========================================
+let FILTRO_CARGO = "pendientes";
+
+window.cambiarFiltroCargo = function(boton) {
+    FILTRO_CARGO = boton.dataset.filtro;
+    document.querySelectorAll(".cargo-filtro").forEach(b => b.classList.toggle("activo", b === boton));
+    cargarControlCargo();
+}
+
+window.cargarControlCargo = function() {
+    const lista = document.getElementById("lista-control-cargo");
+    if (!lista) return;
+    const bomberos = MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : [];
+    if (bomberos.length === 0) { lista.innerHTML = esqueletoLista(5); return; }
+
+    const conEstado = bomberos.map(b => ({ b, estado: estadoCargo(b) }));
+    const n = { ok: 0, obs: 0, pend: 0 };
+    conEstado.forEach(x => n[x.estado]++);
+    const total = conEstado.length, revisados = n.ok + n.obs;
+    const porc = total ? Math.round(revisados / total * 100) : 0;
+    document.getElementById("cargo-revisados").innerText = revisados;
+    document.getElementById("cargo-total").innerText = total;
+    document.getElementById("cargo-porcentaje").innerText = `${porc}%`;
+    document.getElementById("cargo-barra-relleno").style.width = `${porc}%`;
+    document.getElementById("cargo-n-conforme").innerText = n.ok;
+    document.getElementById("cargo-n-obs").innerText = n.obs;
+    document.getElementById("cargo-n-pend").innerText = n.pend;
+    document.getElementById("cargo-ciclo-texto").innerText = CICLO_CARGO.inicio
+        ? `Revisión en curso desde el ${fechaCorta(CICLO_CARGO.inicio)}${CICLO_CARGO.iniciadoPor ? ` (la inició ${CICLO_CARGO.iniciadoPor})` : ""}.`
+        : "Cuentan todas las revisiones registradas. Usa \"Iniciar nueva revisión\" para partir de cero.";
+
+    let filtrados = conEstado;
+    if (FILTRO_CARGO === "pendientes") filtrados = filtrados.filter(x => x.estado === "pend");
+    if (FILTRO_CARGO === "revisados") filtrados = filtrados.filter(x => x.estado !== "pend");
+    if (FILTRO_CARGO === "obs") filtrados = filtrados.filter(x => x.estado === "obs");
+    const texto = (document.getElementById("cargo-busqueda").value || "").trim().toLowerCase();
+    if (texto) filtrados = filtrados.filter(x => `${x.b.nombre} ${x.b.cargo}`.toLowerCase().includes(texto));
+
+    if (filtrados.length === 0) {
+        lista.innerHTML = texto
+            ? estadoVacio("fa-solid fa-magnifying-glass", "Sin resultados", `Nadie coincide con "${htmlSeguro(texto)}".`)
+            : FILTRO_CARGO === "pendientes"
+                ? estadoVacio("fa-solid fa-circle-check", "¡No queda nadie pendiente!", "Todos los bomberos tienen su cargo revisado en esta revisión.")
+                : estadoVacio("fa-regular fa-clipboard", "Nada por aquí", "Todavía no hay bomberos en este grupo.");
+        return;
+    }
+
+    lista.innerHTML = filtrados.map(({ b, estado }, i) => {
+        const rev = b.revisionCargo;
+        const iniciales = b.nombre.split(" ").filter(Boolean).slice(0, 2).map(p => p[0]).join("").toUpperCase();
+        const detalle = estado === "pend"
+            ? (rev && rev.fecha ? `Última revisión: ${fechaCorta(rev.fecha)}` : "Sin revisiones")
+            : `${fechaCorta(rev.fecha)}${rev.revisor ? ` · ${htmlSeguro(rev.revisor.split(" ").slice(0, 2).join(" "))}` : ""}`;
+        return `
+            <div class="card-item cargo-card" style="animation-delay: ${Math.min(i, 10) * 30}ms;" onclick="abrirEdicionEPP('${htmlSeguro(b.nombre)}')">
+                <div class="cargo-avatar cargo-avatar-${estado}">${estado === "pend" ? iniciales : `<i class="fa-solid ${estado === "ok" ? "fa-check" : "fa-exclamation"}"></i>`}</div>
+                <div class="cargo-info">
+                    <div class="cargo-nombre">${htmlSeguro(b.nombre)}</div>
+                    <div class="cargo-detalle">${htmlSeguro(b.cargo || "")} · ${detalle}</div>
+                    ${estado === "obs" && rev.observaciones ? `<div class="cargo-obs">${htmlSeguro(rev.observaciones)}</div>` : ""}
+                </div>
+                <span class="cargo-chip cargo-chip-${estado}">${ETIQUETA_ESTADO_CARGO[estado]}</span>
+            </div>`;
+    }).join("");
+}
+
+window.iniciarNuevaRevisionCargo = async function() {
+    if (!tienePermiso("editar_epp")) { alert("🔒 No tienes permiso para esta acción."); return; }
+    const ok = await confirmar("¿Iniciar una nueva revisión de cargo?\n\nTodos los bomberos volverán a quedar como pendientes. Las revisiones anteriores no se borran: quedan en el historial de cada uno.", { aceptar: "Iniciar revisión", peligro: false });
+    if (!ok) return;
+    const sesion = obtenerSesion();
+    try {
+        await setDoc(doc(dbCloud, "control_cargo", "ciclo"), { inicio: Date.now(), iniciadoPor: sesion ? sesion.nombre : "" });
+        alert("✅ Nueva revisión iniciada. Todos quedan pendientes.");
+    } catch(e) {
+        alert("No se pudo iniciar la revisión. Revisa tu conexión.");
     }
 }
 
@@ -3241,13 +3485,15 @@ window.cargarListaOficiales = function() {
             : permisos.length === 0
                 ? `<span style="color: var(--texto-gris); font-size: 0.8rem;">Sin permisos asignados</span>`
                 : CATALOGO_PERMISOS.filter(p => permisos.includes(p.key)).map(p => `<span class="badge" style="font-size: 0.7rem;">${p.label}</span>`).join("");
+        const esEscritorio = o.tipo === "escritorio";
         const titulo = o.maestro ? "Acceso maestro (Ayudantes)" : o.nombre;
-        const subtitulo = o.maestro ? "PIN maestro" : o.cargo;
+        const subtitulo = o.maestro ? "PIN maestro" : esEscritorio ? `Sesión de escritorio · ${textoDuracionEscritorio(o.duracionHoras ?? 12)}` : o.cargo;
+        const icono = o.maestro ? '<i class="fa-solid fa-key" style="color: var(--dorado);"></i> ' : esEscritorio ? '<i class="fa-solid fa-desktop" style="color: var(--dorado);"></i> ' : '';
         return `
         <div class="glass-panel" onclick="abrirEditorOficial('${o.id}')" style="cursor: pointer; padding: 15px; border-radius: 16px; margin-bottom: 12px; ${activo ? '' : 'opacity: 0.55;'}">
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
                 <div>
-                    <div style="color: var(--texto-blanco); font-weight: bold;">${o.maestro ? '<i class="fa-solid fa-key" style="color: var(--dorado);"></i> ' : ''}${titulo}</div>
+                    <div style="color: var(--texto-blanco); font-weight: bold;">${icono}${htmlSeguro(titulo)}</div>
                     <div style="color: var(--dorado); font-size: 0.85rem; margin-top: 2px;">${subtitulo}${activo ? '' : ' · <span style="color: var(--rojo-emergencia);">Desactivado</span>'}${o.pin ? ' · <span style="color: var(--texto-gris);">sin migrar</span>' : ''}</div>
                 </div>
                 <i class="fa-solid fa-chevron-right" style="color: var(--texto-gris);"></i>
@@ -3269,12 +3515,17 @@ function renderizarCheckboxPermisos(seleccionados) {
     `).join("");
 }
 
-window.abrirEditorOficial = function(idOficial) {
+let modoEditorOficial = "oficial";
+window.abrirEditorOficial = function(idOficial, modo) {
     if (!tienePermiso("gestionar_oficiales")) { alert("🔒 No tienes permiso para esta acción."); return; }
     if (hayDatosSinMigrar()) { alert("Antes de crear o editar oficiales, toca \"Migrar oficiales\" (arriba en esta pestaña)."); return; }
     oficialEditandoId = idOficial || null;
     const o = idOficial ? MEMORIA_OFICIALES.find(x => x.id === idOficial) : null;
     const esMaestro = !!(o && o.maestro);
+    const esEscritorio = o ? o.tipo === "escritorio" : modo === "escritorio";
+    modoEditorOficial = esMaestro ? "maestro" : esEscritorio ? "escritorio" : "oficial";
+    document.getElementById("oficial-nombre-escritorio").value = esEscritorio && o ? o.nombre : "";
+    document.getElementById("oficial-duracion").value = String(esEscritorio && o ? (o.duracionHoras ?? 12) : 0);
 
     const bomberos = MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial;
     const sel = document.getElementById("oficial-nombre");
@@ -3282,7 +3533,9 @@ window.abrirEditorOficial = function(idOficial) {
     sel.value = o ? o.nombre : "";
     sel.disabled = !!o;
 
-    document.getElementById("oficial-titulo").innerText = esMaestro ? "Acceso maestro" : (o ? "Editar Oficial" : "Nuevo Oficial");
+    document.getElementById("oficial-titulo").innerText = esMaestro ? "Acceso maestro"
+        : esEscritorio ? (o ? "Sesión de escritorio" : "Nueva sesión de escritorio")
+        : (o ? "Editar Oficial" : "Nuevo Oficial");
     document.getElementById("oficial-cargo").value = o ? o.cargo : "";
     // El PIN ya no se guarda en la base: al editar, el campo vacío mantiene el PIN actual
     const inpPin = document.getElementById("oficial-pin");
@@ -3296,6 +3549,11 @@ window.abrirEditorOficial = function(idOficial) {
     document.getElementById("btn-eliminar-oficial").style.display = o && !esMaestro ? "block" : "none";
     // El acceso maestro solo permite cambiar su PIN: tiene todos los permisos siempre
     document.querySelectorAll(".solo-oficial-normal").forEach(el => el.style.display = esMaestro ? "none" : "");
+    document.querySelectorAll(".solo-persona").forEach(el => el.style.display = (esMaestro || esEscritorio) ? "none" : "");
+    document.querySelectorAll(".solo-escritorio").forEach(el => el.style.display = esEscritorio ? "" : "none");
+    document.querySelector('#modal-oficial .btn-primary[onclick="guardarOficial()"]').innerHTML = esEscritorio
+        ? '<i class="fa-solid fa-floppy-disk"></i> Guardar sesión de escritorio'
+        : '<i class="fa-solid fa-floppy-disk"></i> Guardar Oficial';
 
     renderizarCheckboxPermisos(o ? (o.permisos || []) : []);
     abrirModal("modal-oficial");
@@ -3322,16 +3580,22 @@ window.guardarOficial = async function() {
     if (!tienePermiso("gestionar_oficiales")) { alert("🔒 No tienes permiso para esta acción."); return; }
     const existente = oficialEditandoId ? MEMORIA_OFICIALES.find(o => o.id === oficialEditandoId) : null;
     const esMaestro = !!(existente && existente.maestro);
-    const nombre = existente ? existente.nombre : document.getElementById("oficial-nombre").value;
-    const cargo = esMaestro ? existente.cargo : document.getElementById("oficial-cargo").value.trim();
+    const esEscritorio = existente ? existente.tipo === "escritorio" : modoEditorOficial === "escritorio";
+    const nombre = esEscritorio ? document.getElementById("oficial-nombre-escritorio").value.trim()
+        : existente ? existente.nombre : document.getElementById("oficial-nombre").value;
+    const cargo = esEscritorio ? "Sesión de escritorio" : esMaestro ? existente.cargo : document.getElementById("oficial-cargo").value.trim();
     const pin = document.getElementById("oficial-pin").value.trim();
     const activo = esMaestro ? true : document.getElementById("oficial-activo").checked;
     const permisos = esMaestro ? [] : Array.from(document.querySelectorAll(".chk-permiso-oficial:checked")).map(c => c.value);
 
-    if (!nombre) { alert("Selecciona el voluntario."); return; }
+    if (!nombre) { alert(esEscritorio ? "Ponle un nombre a la sesión, por ejemplo \"PC Compañía\"." : "Selecciona el voluntario."); return; }
     if (!cargo) { alert("Indica el cargo."); return; }
     if ((!existente || pin) && !/^\d{5}$/.test(pin)) { alert("El PIN debe tener exactamente 5 números."); return; }
-    if (!existente && MEMORIA_OFICIALES.some(o => o.nombre === nombre)) { alert("Este voluntario ya tiene un perfil de oficial. Ábrelo desde la lista para editarlo."); return; }
+    if (MEMORIA_OFICIALES.some(o => o.nombre === nombre && o.id !== oficialEditandoId)) {
+        alert(esEscritorio ? "Ya existe una sesión con ese nombre. Elige otro." : "Este voluntario ya tiene un perfil de oficial. Ábrelo desde la lista para editarlo.");
+        return;
+    }
+    if (esEscritorio && permisos.length === 0) { alert("Marca al menos un permiso para la sesión de escritorio."); return; }
 
     const sesion = obtenerSesion();
     if (sesion && !sesion.esMaestro && sesion.id === oficialEditandoId && !permisos.includes("gestionar_oficiales")) {
@@ -3342,6 +3606,10 @@ window.guardarOficial = async function() {
     boton.disabled = true;
     try {
         const datos = { nombre, cargo, permisos, activo, maestro: esMaestro };
+        if (esEscritorio) {
+            const h = parseInt(document.getElementById("oficial-duracion").value);
+            datos.tipo = "escritorio"; datos.duracionHoras = isNaN(h) ? 0 : h;
+        }
         let idFinal = oficialEditandoId;
 
         if (pin) {
@@ -3382,7 +3650,10 @@ window.eliminarOficial = async function() {
     if (!tienePermiso("gestionar_oficiales") || !oficialEditandoId) return;
     const o = MEMORIA_OFICIALES.find(x => x.id === oficialEditandoId);
     if (o && o.maestro) { alert("El acceso maestro no se puede eliminar. Puedes cambiarle el PIN."); return; }
-    if (!await confirmar(`¿Eliminar el perfil de oficial de ${o ? o.nombre : "este oficial"}? Su PIN dejará de funcionar de inmediato.`)) return;
+    const texto = o && o.tipo === "escritorio"
+        ? `¿Eliminar la sesión de escritorio "${o.nombre}"? Su PIN dejará de funcionar de inmediato.`
+        : `¿Eliminar el perfil de oficial de ${o ? o.nombre : "este oficial"}? Su PIN dejará de funcionar de inmediato.`;
+    if (!await confirmar(texto)) return;
     try {
         await deleteDoc(doc(dbCloud, "oficiales", oficialEditandoId));
         cerrarModal("modal-oficial");
