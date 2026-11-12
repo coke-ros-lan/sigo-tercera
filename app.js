@@ -514,7 +514,6 @@ const DatosClaves = {
         { nombre: "Jorge Antonio Rosales Landeros", cargo: "Ayudante 2°" },
         { nombre: "Mónica Mariliz Muñoz Ortiz", cargo: "Bombera Compañía" },
         { nombre: "Abel Alejandro Espinoza Cañete", cargo: "Bombero Compañía" },
-        { nombre: "Juan Carlos Chamorro Guajardo", cargo: "Bombero Compañía" },
         { nombre: "Oscar Gabriel Fuentealba Oliva", cargo: "Bombero Compañía" },
         { nombre: "Fernando Moisés Gonzalez Cifuentes", cargo: "Bombero Compañía" },
         { nombre: "Sebastián Felipe González Tamayo", cargo: "Bombero Compañía" },
@@ -529,8 +528,19 @@ const DatosClaves = {
         { nombre: "Luis Jesus Hidalgo Piutrin", cargo: "Bombero Compañía" },
         { nombre: "Juan Pablo Valenzuela Toledo", cargo: "Bombero Compañía" },
         { nombre: "Augusto Rapiman Cayumil", cargo: "Bombero Compañía" }
+    ],
+    // Dados de baja: no aparecen en listas ni fichas (su historial en servicios anteriores se mantiene)
+    bajas: [
+        "Juan Carlos Chamorro Guajardo"
     ]
 };
+
+// Oficiales de la compañía (los que pueden quedar a cargo de una revisión de cargo)
+function esOficialCompania(cargo) {
+    const c = String(cargo || "");
+    if (/general|honorari|superintendente/i.test(c)) return false;
+    return /^(director|capit[aá]n|teniente|ayudante|secretari|pro secretari|tesorer|pro tesorer)/i.test(c.trim());
+}
 
 // ==========================================
 // 3. VARIABLES GLOBALES Y SISTEMA DE RADIO
@@ -634,7 +644,7 @@ function conectarRadioEnTiempoReal() {
 
     onSnapshot(collection(dbCloud, "bomberos"), (snapshot) => {
         let todos = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        MEMORIA_BOMBEROS = [...new Map(todos.map(b => [b.nombre, b])).values()];
+        MEMORIA_BOMBEROS = [...new Map(todos.map(b => [b.nombre, b])).values()].filter(b => !DatosClaves.bajas.includes(b.nombre));
         if (MEMORIA_BOMBEROS.length > 0) {
             DatosClaves.nominaOficial.forEach(n => {
                 if (!MEMORIA_BOMBEROS.some(b => b.nombre === n.nombre)) MEMORIA_BOMBEROS.push({ nombre: n.nombre, cargo: n.cargo, grado: "Voluntario" });
@@ -3000,11 +3010,12 @@ window.alCambiarRadioEPP = function() {
     document.getElementById("epp-radio-detalle").style.display = document.getElementById("edit-acc-radio").value ? "block" : "none";
 }
 
+// Solo los oficiales de la compañía pueden quedar a cargo de una revisión
 function opcionesRevisor(seleccionado) {
-    const bomberos = MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial;
+    const bomberos = (MEMORIA_BOMBEROS.length > 0 ? MEMORIA_BOMBEROS : DatosClaves.nominaOficial).filter(b => esOficialCompania(b.cargo));
     const sel = document.getElementById("edit-rev-revisor");
-    sel.innerHTML = `<option value="">-- Quién revisa --</option>` +
-        bomberos.map(b => `<option value="${htmlSeguro(b.nombre)}">${htmlSeguro(b.nombre)}</option>`).join("");
+    sel.innerHTML = `<option value="">-- Oficial a cargo --</option>` +
+        bomberos.map(b => `<option value="${htmlSeguro(b.nombre)}">${htmlSeguro(b.cargo)} · ${htmlSeguro(b.nombre)}</option>`).join("");
     sel.value = bomberos.some(b => b.nombre === seleccionado) ? seleccionado : "";
 }
 
@@ -3043,7 +3054,7 @@ window.abrirEdicionEPP = function(nombre) {
     document.getElementById("edit-rev-obs").value = estado !== "pend" && rev ? (rev.observaciones || "") : "";
     document.getElementById("epp-ultima-revision").innerHTML = rev && rev.fecha
         ? `Última revisión: <b>${fechaCorta(rev.fecha)}</b>${rev.revisor ? ` por ${htmlSeguro(rev.revisor)}` : ""} · ${htmlSeguro(rev.estado || "Conforme")}${estado === "pend" ? " <span style='color: var(--dorado);'>(de una revisión anterior)</span>" : ""}`
-        : "Este bombero todavía no tiene revisiones registradas.";
+        : "";
 
     abrirModal("modal-editar-epp");
 }
@@ -3078,7 +3089,7 @@ window.guardarEdicionEPP = async function(marcarRevisado) {
 
     if (marcarRevisado) {
         const revisor = g("edit-rev-revisor");
-        if (!revisor) { alert("Elige quién está revisando el cargo."); document.getElementById("edit-rev-revisor").focus(); return; }
+        if (!revisor) { alert("Elige el oficial a cargo de la revisión."); document.getElementById("edit-rev-revisor").focus(); return; }
         const estado = g("edit-rev-estado");
         const observaciones = g("edit-rev-obs");
         if (estado === "Con observaciones" && !observaciones) { alert("Escribe qué observación tiene el cargo."); document.getElementById("edit-rev-obs").focus(); return; }
@@ -3155,7 +3166,7 @@ window.cargarControlCargo = function() {
     document.getElementById("cargo-n-pend").innerText = n.pend;
     document.getElementById("cargo-ciclo-texto").innerText = CICLO_CARGO.inicio
         ? `Revisión en curso desde el ${fechaCorta(CICLO_CARGO.inicio)}${CICLO_CARGO.iniciadoPor ? ` (la inició ${CICLO_CARGO.iniciadoPor})` : ""}.`
-        : "Cuentan todas las revisiones registradas. Usa \"Iniciar nueva revisión\" para partir de cero.";
+        : "";
 
     let filtrados = conEstado;
     if (FILTRO_CARGO === "pendientes") filtrados = filtrados.filter(x => x.estado === "pend");
@@ -3551,9 +3562,6 @@ window.abrirEditorOficial = function(idOficial, modo) {
     const inpPin = document.getElementById("oficial-pin");
     inpPin.value = "";
     inpPin.placeholder = o ? "Vacío = mantener el PIN actual" : "•••••";
-    document.getElementById("oficial-pin-ayuda").innerText = o
-        ? "Por seguridad el PIN actual no se muestra. Escribe uno nuevo solo si quieres cambiarlo."
-        : "";
     document.getElementById("oficial-activo").checked = o ? o.activo !== false : true;
     document.getElementById("contenedor-oficial-activo").style.display = o && !esMaestro ? "block" : "none";
     document.getElementById("btn-eliminar-oficial").style.display = o && !esMaestro ? "block" : "none";

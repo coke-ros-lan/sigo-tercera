@@ -168,7 +168,6 @@
                     <div class="lic-icono"><i class="fa-solid fa-calendar-xmark"></i></div>
                     <div>
                         <h2 class="title-header">Solicitar Licencia</h2>
-                        <p class="lic-sub">Avisa si no podrás asistir a una citación.</p>
                     </div>
                 </div>
 
@@ -258,7 +257,6 @@
         <section id="licencias-vista" class="view-section req-perm-licencias">
             <div class="header-section">
                 <h2 class="title-header">Registro de Licencias</h2>
-                <p style="color: var(--texto-gris); margin-top: 5px;">Revisión y control de licencias solicitadas por el personal.</p>
             </div>
             <div id="lista-licencias-registradas" class="list-container"></div>
         </section>
@@ -335,7 +333,6 @@
         <section id="oficios-vista" class="view-section req-perm-oficios">
             <div class="header-section">
                 <h2 class="title-header">Archivo de Oficios</h2>
-                <p style="color: var(--texto-gris); margin-top: 5px;">Copias firmadas de los oficios despachados, en PDF.</p>
             </div>
 
             <button id="btn-abrir-oficio" class="btn-primary" style="width: 100%; margin-bottom: 16px;" onclick="abrirFormOficio()"><i class="fa-solid fa-file-arrow-up"></i> Subir oficio</button>
@@ -386,7 +383,6 @@
         <section id="control-cargo" class="view-section req-perm-editar_epp">
             <div class="header-section">
                 <h2 class="title-header">Control de Cargo</h2>
-                <p style="color: var(--texto-gris); margin-top: 5px;">Revisa el equipo de cada bombero y lleva la cuenta de quiénes faltan.</p>
             </div>
 
             <div class="glass-panel cargo-resumen">
@@ -428,7 +424,6 @@
         <section id="oficiales-vista" class="view-section req-perm-gestionar_oficiales">
             <div class="header-section">
                 <h2 class="title-header">Gestión de Oficiales</h2>
-                <p style="color: var(--texto-gris); margin-top: 5px;">Crea el perfil de cada oficial, asígnale su PIN personal de 5 dígitos y define a qué puede acceder.</p>
             </div>
             <div id="aviso-migracion" class="glass-panel" style="display: none; padding: 18px; border-radius: 16px; margin-bottom: 16px;">
                 <div style="font-weight: 700; color: var(--texto-blanco); margin-bottom: 6px;"><i class="fa-solid fa-shield-halved" style="color: var(--dorado);"></i> Falta pasar los PIN a cuentas seguras</div>
@@ -538,7 +533,6 @@
             </div>
             <div class="modal-body">
                 <i class="fa-solid fa-helmet-safety" style="font-size: 3rem; color: var(--dorado); margin-bottom: 15px;"></i>
-                <p style="color: var(--texto-gris); margin-bottom: 20px; font-size: 0.95rem;">Selecciona tu nombre para confirmar tu presencia operativa.</p>
                 <select id="sel-autoregistro-nombre" class="input-glass" style="margin-bottom: 20px;"></select>
                 <p id="txt-autoregistro-estado" style="color: var(--dorado); margin-bottom: 15px; font-size: 0.9rem;"></p>
                 <div id="caja-pin-autoregistro" style="display: none; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.1);">
@@ -741,7 +735,6 @@
             </div>
             <div class="modal-body">
                 <div class="form-group solo-escritorio" style="display: none;">
-                    <p style="color: var(--texto-gris); font-size: 0.88rem; line-height: 1.45; margin-bottom: 14px;">Para un computador compartido, como el de la compañía. No pertenece a una persona: entra con su propio PIN y solo puede hacer lo que marques abajo.</p>
                     <label>Nombre de la sesión</label>
                     <input type="text" id="oficial-nombre-escritorio" class="input-glass" placeholder="Ej: PC Compañía" maxlength="40">
                 </div>
@@ -769,7 +762,6 @@
                         <input type="text" inputmode="numeric" maxlength="5" id="oficial-pin" class="input-glass" placeholder="•••••" style="flex: 1;">
                         <button class="btn-secundary" style="white-space: nowrap;" onclick="generarPinOficial()"><i class="fa-solid fa-dice"></i> Generar</button>
                     </div>
-                    <p id="oficial-pin-ayuda" style="color: var(--texto-gris); font-size: 0.8rem; margin-top: 8px;"></p>
                 </div>
                 <div class="form-group" id="contenedor-oficial-activo" style="display: none;">
                     <label class="checkbox-item">
@@ -864,7 +856,6 @@
                 <span class="close-btn" onclick="cerrarModal('modal-fusion-servicio')"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div class="modal-body">
-                <p style="color: var(--texto-gris); font-size: 0.9rem; margin-bottom: 15px;">Usa esto cuando varios voluntarios crearon el mismo servicio por separado. El duplicado se elimina y sus asistentes y carros se suman al servicio principal.</p>
                 <div class="info-box" style="margin-bottom: 20px;">
                     <label style="color: var(--dorado); font-size: 0.8rem; display: block; margin-bottom: 5px;">SERVICIO PRINCIPAL (se mantiene)</label>
                     <p id="fusion-info-principal" style="color: var(--texto-blanco); font-weight: bold;"></p>
@@ -1034,7 +1025,7 @@
                     <p id="epp-ultima-revision" class="epp-ultima-revision"></p>
                     <div class="form-group epp-fila">
                         <div>
-                            <label>Revisado por</label>
+                            <label>Oficial a cargo</label>
                             <select id="edit-rev-revisor" class="input-glass"></select>
                         </div>
                         <div>
@@ -1075,7 +1066,6 @@
                 <span class="close-btn" onclick="cerrarModal('modal-copiar-asistencia')"><i class="fa-solid fa-xmark"></i></span>
             </div>
             <div class="modal-body">
-                <p style="color: var(--texto-gris); font-size: 0.9rem; margin-bottom: 12px;">Elige el servicio del que quieres copiar la lista. Podrás revisarla y corregirla antes de guardar.</p>
                 <input type="text" id="buscar-copiar-asistencia" class="input-glass" placeholder="Buscar por clave, actividad o dirección" oninput="renderListaCopiarAsistencia()" style="margin-bottom: 12px;">
                 <div id="lista-copiar-asistencia" style="display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; padding-right: 4px;"></div>
             </div>

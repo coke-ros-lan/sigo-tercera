@@ -1253,3 +1253,4 @@ html.tema-claro .cargo-chip-pend { background: var(--c-suave); }
     #lista-control-cargo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     #lista-control-cargo .estado-vacio { grid-column: 1 / -1; }
 }
+.cargo-ciclo:empty, .epp-ultima-revision:empty { display: none; }
